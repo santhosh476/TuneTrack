@@ -1,0 +1,56 @@
+name: flutter_application_1
+description: "TuneTrack - Complete Flutter + Dart Music Player, Spotify Integration & Music Tracker"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # State Management & Navigation
+  flutter_riverpod: ^2.5.1
+  go_router: ^14.2.0
+
+  # Audio Playback & Session Management
+  just_audio: ^0.9.39
+  audio_session: ^0.1.19
+
+  # Local-First Database & Storage
+  drift: ^2.18.0
+  sqlite3_flutter_libs: ^0.5.24
+  path_provider: ^2.1.3
+  path: ^1.9.0
+  shared_preferences: ^2.2.3
+  flutter_secure_storage: ^9.2.2
+
+  # Analytics & Charts
+  fl_chart: ^0.68.0
+
+  # File Picker for Local Audio Files
+  file_picker: ^8.0.5
+
+  # Network & Utilities
+  http: ^1.2.1
+  uuid: ^4.4.0
+  intl: ^0.19.0
+  google_fonts: ^6.2.1
+  url_launcher: ^6.3.0
+  crypto: ^3.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  drift_dev: ^2.18.0
+  build_runner: ^2.4.9
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/audio/
+    - assets/images/
+    - assets/icons/
