@@ -1,3 +1,4 @@
+
 name: Build Android APK
 
 on:
@@ -25,39 +26,39 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Set up Flutter (stable)
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      - name: Install Android SDK Platform 36
-        run: |
-          sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
-          yes | sdkmanager --licenses
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
-      - name: Check Flutter and Android Environment
+      - name: Check Build Environment
         run: |
           flutter --version
           java -version
           flutter doctor -v
 
-      - name: Install Flutter dependencies
+      - name: Install Flutter Dependencies
         run: flutter pub get
 
-      - name: Check Dart formatting
+      - name: Check Dart Formatting
         run: dart format --output=none --set-exit-if-changed lib test
         continue-on-error: true
 
       - name: Build Android Release APK
         run: flutter build apk --release --verbose
 
-      - name: Verify APK exists
+      - name: Verify APK Exists
         run: |
           test -f build/app/outputs/flutter-apk/app-release.apk
           ls -lh build/app/outputs/flutter-apk/app-release.apk
 
-      - name: Upload Release APK artifact
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
           name: TuneTrack-APK
@@ -65,7 +66,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload Build Diagnostic Logs on Failure
+      - name: Upload Build Logs on Failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
