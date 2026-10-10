@@ -258,3 +258,8 @@ final sleepTimerStreamProvider = StreamProvider<DateTime?>((ref) {
   final audio = ref.watch(audioPlayerServiceProvider);
   return audio.sleepTimerStream;
 });
+
+final bufferingStreamProvider = StreamProvider<bool>((ref) {
+  final audio = ref.watch(audioPlayerServiceProvider);
+  return audio.bufferingStream;
+});

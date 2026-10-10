@@ -22,6 +22,8 @@ class MiniPlayer extends ConsumerWidget {
 
     final isPlaying =
         isPlayingAsync.value ?? ref.watch(audioPlayerServiceProvider).isPlaying;
+    final isBuffering = ref.watch(bufferingStreamProvider).value ??
+        ref.watch(audioPlayerServiceProvider).isBuffering;
     final position = positionAsync.value ?? Duration.zero;
     final duration = durationAsync.value ?? track.duration;
 
@@ -116,19 +118,33 @@ class MiniPlayer extends ConsumerWidget {
                             .toggleFavourite(track.id);
                       },
                     ),
-                    // Play / Pause Button
-                    IconButton(
-                      icon: Icon(
-                        isPlaying
-                            ? Icons.pause_circle_filled_rounded
-                            : Icons.play_circle_filled_rounded,
-                        color: AppColors.primaryText,
-                        size: 36,
-                      ),
-                      onPressed: () {
-                        ref.read(audioPlayerServiceProvider).togglePlayPause();
-                      },
-                    ),
+                    // Play / Pause / Buffering Button
+                    isBuffering
+                        ? const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: AppColors.primaryAccent,
+                              ),
+                            ),
+                          )
+                        : IconButton(
+                            icon: Icon(
+                              isPlaying
+                                  ? Icons.pause_circle_filled_rounded
+                                  : Icons.play_circle_filled_rounded,
+                              color: AppColors.primaryText,
+                              size: 36,
+                            ),
+                            onPressed: () {
+                              ref
+                                  .read(audioPlayerServiceProvider)
+                                  .togglePlayPause();
+                            },
+                          ),
                   ],
                 ),
               ),

@@ -4,7 +4,9 @@ import 'package:flutter_application_1/features/stats/music_intelligence_service.
 
 void main() {
   group('MusicIntelligenceService Tests', () {
-    test('generateInsights produces default summary when session history is empty', () {
+    test(
+        'generateInsights produces default summary when session history is empty',
+        () {
       final summary = MusicIntelligenceService.generateInsights(
         sessions: [],
         currentStreak: 0,
@@ -15,7 +17,9 @@ void main() {
       expect(summary.insightsList.isEmpty, isTrue);
     });
 
-    test('generateInsights correctly identifies peak listening day, top artist, and habits', () {
+    test(
+        'generateInsights correctly identifies peak listening day, top artist, and habits',
+        () {
       final now = DateTime.now();
       final sessions = [
         ListeningSessionModel(
@@ -28,7 +32,9 @@ void main() {
           genre: 'Electronic',
           playbackSource: 'local',
           startedAt: now.subtract(const Duration(days: 1)),
-          endedAt: now.subtract(const Duration(days: 1)).add(const Duration(seconds: 120)),
+          endedAt: now
+              .subtract(const Duration(days: 1))
+              .add(const Duration(seconds: 120)),
           audibleDurationSeconds: 120,
           isCompleted: true,
         ),
@@ -42,7 +48,9 @@ void main() {
           genre: 'Electronic',
           playbackSource: 'local',
           startedAt: now.subtract(const Duration(days: 1)),
-          endedAt: now.subtract(const Duration(days: 1)).add(const Duration(seconds: 180)),
+          endedAt: now
+              .subtract(const Duration(days: 1))
+              .add(const Duration(seconds: 180)),
           audibleDurationSeconds: 180,
           isCompleted: true,
         ),
@@ -56,7 +64,9 @@ void main() {
           genre: 'R&B',
           playbackSource: 'local',
           startedAt: now.subtract(const Duration(days: 2)),
-          endedAt: now.subtract(const Duration(days: 2)).add(const Duration(seconds: 200)),
+          endedAt: now
+              .subtract(const Duration(days: 2))
+              .add(const Duration(seconds: 200)),
           audibleDurationSeconds: 200,
           isCompleted: true,
         ),
@@ -76,10 +86,12 @@ void main() {
       expect(summary.nextMilestoneStreak, equals(7));
       expect(summary.insightsList.isNotEmpty, isTrue);
 
-      final topArtistInsight = summary.insightsList.firstWhere((i) => i.id == 'ins_top_artist');
+      final topArtistInsight =
+          summary.insightsList.firstWhere((i) => i.id == 'ins_top_artist');
       expect(topArtistInsight.subtitle, equals('M83'));
 
-      final peakDayInsight = summary.insightsList.firstWhere((i) => i.id == 'ins_active_day');
+      final peakDayInsight =
+          summary.insightsList.firstWhere((i) => i.id == 'ins_active_day');
       expect(peakDayInsight.metricValue, isNotEmpty);
     });
   });

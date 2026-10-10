@@ -43,6 +43,8 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     final duration = durationAsync.value ?? audio.duration ?? track.duration;
     final isShuffle = isShuffleAsync.value ?? audio.isShuffle;
     final repeatMode = repeatModeAsync.value ?? audio.repeatMode;
+    final isBuffering =
+        ref.watch(bufferingStreamProvider).value ?? audio.isBuffering;
 
     final totalSeconds =
         duration.inSeconds > 0 ? duration.inSeconds.toDouble() : 1.0;
@@ -252,21 +254,34 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                       onPressed: () => audio.previous(),
                     ),
                     Container(
+                      width: 66,
+                      height: 66,
                       decoration: const BoxDecoration(
                         color: AppColors.primaryAccent,
                         shape: BoxShape.circle,
                       ),
-                      child: IconButton(
-                        iconSize: 42,
-                        padding: const EdgeInsets.all(12),
-                        icon: Icon(
-                          isPlaying
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                          color: Colors.black,
-                        ),
-                        onPressed: () => audio.togglePlayPause(),
-                      ),
+                      child: isBuffering
+                          ? const Center(
+                              child: SizedBox(
+                                width: 26,
+                                height: 26,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            )
+                          : IconButton(
+                              iconSize: 42,
+                              padding: const EdgeInsets.all(12),
+                              icon: Icon(
+                                isPlaying
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
+                                color: Colors.black,
+                              ),
+                              onPressed: () => audio.togglePlayPause(),
+                            ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.skip_next_rounded,

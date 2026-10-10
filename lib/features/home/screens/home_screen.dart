@@ -220,7 +220,8 @@ class HomeScreen extends ConsumerWidget {
                   final displayTracks = tracks;
                   if (displayTracks.isEmpty) {
                     return const Center(
-                      child: Text('No tracks available. Import or search online.',
+                      child: Text(
+                          'No tracks available. Import or search online.',
                           style: TextStyle(color: AppColors.secondaryText)),
                     );
                   }
