@@ -112,7 +112,8 @@ class PlaylistRepository {
     final recentTracks = <TrackModel>[];
 
     for (final s in sessions) {
-      if (!seenTrackIds.contains(s.trackId) && trackMap.containsKey(s.trackId)) {
+      if (!seenTrackIds.contains(s.trackId) &&
+          trackMap.containsKey(s.trackId)) {
         seenTrackIds.add(s.trackId);
         recentTracks.add(trackMap[s.trackId]!);
         if (recentTracks.length >= limit) break;
@@ -178,7 +179,8 @@ class PlaylistRepository {
 
     for (final track in tracks) {
       final durationSecs = (track.durationMs / 1000).round();
-      buffer.writeln('#EXTINF:$durationSecs,${track.artistName} - ${track.title}');
+      buffer.writeln(
+          '#EXTINF:$durationSecs,${track.artistName} - ${track.title}');
       buffer.writeln(track.audioSourceUrl);
     }
     return buffer.toString();

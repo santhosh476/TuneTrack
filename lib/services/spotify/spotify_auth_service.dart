@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
@@ -6,13 +7,18 @@ import '../../core/constants/spotify_constants.dart';
 import '../../core/errors/app_exceptions.dart';
 import '../../data/local/secure_storage_service.dart';
 
-/// Handles Spotify OAuth 2.0 PKCE Authorization flow
+/// Handles official Spotify OAuth 2.0 Authorization Code with PKCE flow
 class SpotifyAuthService {
   final SecureStorageService _secureStorage;
   final http.Client _client;
 
   // Stored in-memory PKCE code verifier during active auth flow
   String? _codeVerifier;
+  String? _authState;
+
+  // Connection state stream
+  final _connectionController = StreamController<bool>.broadcast();
+  Stream<bool> get connectionStream => _connectionController.stream;
 
   SpotifyAuthService(this._secureStorage, [http.Client? client])
       : _client = client ?? http.Client();
@@ -43,14 +49,18 @@ class SpotifyAuthService {
     required String redirectUri,
   }) {
     _codeVerifier = _generateCodeVerifier();
+    _authState = _generateCodeVerifier().substring(0, 16);
     final codeChallenge = _generateCodeChallenge(_codeVerifier!);
 
     final params = {
-      'client_id': clientId,
+      'client_id': clientId.trim().isEmpty
+          ? SpotifyConstants.defaultClientId
+          : clientId.trim(),
       'response_type': 'code',
       'redirect_uri': redirectUri,
       'code_challenge_method': 'S256',
       'code_challenge': codeChallenge,
+      'state': _authState!,
       'scope': SpotifyConstants.scopesString,
     };
 
@@ -59,37 +69,69 @@ class SpotifyAuthService {
     return uri.toString();
   }
 
+  /// Extracts the authorization code from a callback URL or code string
+  String? extractCodeFromUrl(String callbackUrlOrCode) {
+    final trimmed = callbackUrlOrCode.trim();
+    if (trimmed.isEmpty) return null;
+
+    if (trimmed.contains('code=')) {
+      try {
+        final uri = Uri.parse(trimmed);
+        return uri.queryParameters['code'];
+      } catch (_) {
+        // Fallback simple query string extraction
+        final regex = RegExp(r'[?&]code=([^&]+)');
+        final match = regex.firstMatch(trimmed);
+        if (match != null && match.groupCount >= 1) {
+          return match.group(1);
+        }
+      }
+    }
+    // If user directly pasted the raw code
+    if (!trimmed.contains('://') && !trimmed.contains('?')) {
+      return trimmed;
+    }
+    return null;
+  }
+
   /// Exchanges the authorization code for an Access Token and Refresh Token via PKCE
   Future<String> exchangeCodeForToken({
     required String code,
     required String clientId,
     required String redirectUri,
   }) async {
-    if (_codeVerifier == null) {
-      throw const SpotifyAuthException(
-          'PKCE code verifier is missing. Please initiate authorization first.');
-    }
+    // If verifier is somehow lost (e.g. cold restart during browser auth), generate fallback verifier
+    final verifier = _codeVerifier ?? _generateCodeVerifier();
+    final effectiveClientId = clientId.trim().isEmpty
+        ? SpotifyConstants.defaultClientId
+        : clientId.trim();
 
     try {
       final response = await _client.post(
         Uri.parse(SpotifyConstants.tokenEndpoint),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
-          'client_id': clientId,
+          'client_id': effectiveClientId,
           'grant_type': 'authorization_code',
-          'code': code,
+          'code': code.trim(),
           'redirect_uri': redirectUri,
-          'code_verifier': _codeVerifier!,
+          'code_verifier': verifier,
         },
       );
 
       if (response.statusCode != 200) {
-        final body = jsonDecode(response.body);
-        throw SpotifyAuthException(
-          body['error_description'] as String? ??
-              'Token exchange failed with status ${response.statusCode}',
-          code: body['error'] as String?,
-        );
+        try {
+          final body = jsonDecode(response.body);
+          throw SpotifyAuthException(
+            body['error_description'] as String? ??
+                'Token exchange failed with status ${response.statusCode}',
+            code: body['error'] as String?,
+          );
+        } catch (e) {
+          if (e is SpotifyAuthException) rethrow;
+          throw SpotifyAuthException(
+              'Spotify authorization failed (HTTP ${response.statusCode}): ${response.body}');
+        }
       }
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -103,6 +145,7 @@ class SpotifyAuthService {
         expiresInSeconds: expiresIn,
       );
 
+      _connectionController.add(true);
       return accessToken;
     } catch (e) {
       if (e is SpotifyAuthException) rethrow;
@@ -114,21 +157,29 @@ class SpotifyAuthService {
   /// Refreshes expired access token using stored refresh token
   Future<String?> refreshAccessToken(String clientId) async {
     final refreshToken = await _secureStorage.getSpotifyRefreshToken();
-    if (refreshToken == null) return null;
+    if (refreshToken == null || refreshToken.isEmpty) return null;
+
+    final effectiveClientId = clientId.trim().isEmpty
+        ? SpotifyConstants.defaultClientId
+        : clientId.trim();
 
     try {
       final response = await _client.post(
         Uri.parse(SpotifyConstants.tokenEndpoint),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
-          'client_id': clientId,
+          'client_id': effectiveClientId,
           'grant_type': 'refresh_token',
           'refresh_token': refreshToken,
         },
       );
 
       if (response.statusCode != 200) {
-        await _secureStorage.clearSpotifyTokens();
+        // If refresh fails due to revoked grant, clear tokens
+        if (response.statusCode == 400 || response.statusCode == 401) {
+          await _secureStorage.clearSpotifyTokens();
+          _connectionController.add(false);
+        }
         return null;
       }
 
@@ -143,6 +194,7 @@ class SpotifyAuthService {
         expiresInSeconds: expiresIn,
       );
 
+      _connectionController.add(true);
       return newAccessToken;
     } catch (_) {
       return null;
@@ -153,17 +205,25 @@ class SpotifyAuthService {
   Future<String?> getValidAccessToken(String clientId) async {
     final isExpired = await _secureStorage.isSpotifyTokenExpired();
     if (isExpired) {
-      return refreshAccessToken(clientId);
+      final refreshed = await refreshAccessToken(clientId);
+      if (refreshed != null) return refreshed;
     }
     return _secureStorage.getSpotifyAccessToken();
   }
 
   Future<void> disconnect() async {
     await _secureStorage.clearSpotifyTokens();
+    _codeVerifier = null;
+    _authState = null;
+    _connectionController.add(false);
   }
 
   Future<bool> isConnected() async {
     final token = await _secureStorage.getSpotifyAccessToken();
     return token != null && token.isNotEmpty;
+  }
+
+  void dispose() {
+    _connectionController.close();
   }
 }

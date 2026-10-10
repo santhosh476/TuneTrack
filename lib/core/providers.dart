@@ -88,7 +88,18 @@ final spotifyApiServiceProvider = Provider<SpotifyApiService>((ref) {
 final spotifyRepositoryProvider = Provider<SpotifyRepository>((ref) {
   final auth = ref.watch(spotifyAuthServiceProvider);
   final api = ref.watch(spotifyApiServiceProvider);
-  return SpotifyRepository(auth, api);
+  final db = ref.watch(appDatabaseProvider);
+  return SpotifyRepository(auth, api, db);
+});
+
+final spotifyConnectionStateProvider = StreamProvider<bool>((ref) {
+  final repo = ref.watch(spotifyRepositoryProvider);
+  return repo.connectionStream;
+});
+
+final isSpotifyConnectedProvider = FutureProvider<bool>((ref) async {
+  final repo = ref.watch(spotifyRepositoryProvider);
+  return repo.isConnected();
 });
 
 // 4. Audio Engine & Tracker

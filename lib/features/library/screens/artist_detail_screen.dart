@@ -21,7 +21,9 @@ class ArtistDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final allTracks = ref.watch(allTracksProvider);
-    final artistTracks = allTracks.where((t) => t.artistName.toLowerCase() == artistName.toLowerCase()).toList();
+    final artistTracks = allTracks
+        .where((t) => t.artistName.toLowerCase() == artistName.toLowerCase())
+        .toList();
     final audio = ref.read(audioPlayerServiceProvider);
 
     return Scaffold(
@@ -38,7 +40,10 @@ class ArtistDetailScreen extends ConsumerWidget {
                 fit: StackFit.expand,
                 children: [
                   NetworkOrAssetImage(
-                    imageUrl: artistImageUrl ?? (artistTracks.isNotEmpty ? artistTracks.first.artworkUrl : null),
+                    imageUrl: artistImageUrl ??
+                        (artistTracks.isNotEmpty
+                            ? artistTracks.first.artworkUrl
+                            : null),
                     fit: BoxFit.cover,
                     placeholderIcon: Icons.person_rounded,
                   ),
@@ -63,9 +68,11 @@ class ArtistDetailScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryAccent.withValues(alpha: 0.2),
+                            color:
+                                AppColors.primaryAccent.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -79,12 +86,14 @@ class ArtistDetailScreen extends ConsumerWidget {
                         const SizedBox(height: 8),
                         Text(
                           artistName,
-                          style: AppTypography.displayLarge.copyWith(fontWeight: FontWeight.w800),
+                          style: AppTypography.displayLarge
+                              .copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           '${artistTracks.length} tracks available',
-                          style: AppTypography.bodySmall.copyWith(color: AppColors.secondaryText),
+                          style: AppTypography.bodySmall
+                              .copyWith(color: AppColors.secondaryText),
                         ),
                       ],
                     ),
@@ -98,21 +107,25 @@ class ArtistDetailScreen extends ConsumerWidget {
           if (artistTracks.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.shuffle_rounded, color: AppColors.secondaryText, size: 26),
+                      icon: const Icon(Icons.shuffle_rounded,
+                          color: AppColors.secondaryText, size: 26),
                       onPressed: () {
-                        final shuffled = List<TrackModel>.from(artistTracks)..shuffle();
+                        final shuffled = List<TrackModel>.from(artistTracks)
+                          ..shuffle();
                         audio.playTrack(shuffled.first, queueContext: shuffled);
                       },
                     ),
                     FloatingActionButton.small(
                       backgroundColor: AppColors.primaryAccent,
                       foregroundColor: Colors.black,
-                      onPressed: () => audio.playTrack(artistTracks.first, queueContext: artistTracks),
+                      onPressed: () => audio.playTrack(artistTracks.first,
+                          queueContext: artistTracks),
                       child: const Icon(Icons.play_arrow_rounded, size: 28),
                     ),
                   ],
@@ -126,7 +139,8 @@ class ArtistDetailScreen extends ConsumerWidget {
               child: EmptyStateView(
                 icon: Icons.music_off_rounded,
                 title: 'No tracks found for $artistName',
-                description: 'Import local audio or search Spotify to add tracks for this artist',
+                description:
+                    'Import local audio or search Spotify to add tracks for this artist',
               ),
             )
           else
@@ -135,10 +149,13 @@ class ArtistDetailScreen extends ConsumerWidget {
                 (context, index) {
                   final track = artistTracks[index];
                   return ListTile(
-                    leading: Text('${index + 1}', style: AppTypography.labelMedium.copyWith(color: AppColors.secondaryText)),
+                    leading: Text('${index + 1}',
+                        style: AppTypography.labelMedium
+                            .copyWith(color: AppColors.secondaryText)),
                     title: Text(
                       track.title,
-                      style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w600),
+                      style: AppTypography.titleSmall
+                          .copyWith(fontWeight: FontWeight.w600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -151,16 +168,21 @@ class ArtistDetailScreen extends ConsumerWidget {
                         ref.watch(trackRepositoryProvider).isFavourite(track.id)
                             ? Icons.favorite_rounded
                             : Icons.favorite_border_rounded,
-                        color: ref.watch(trackRepositoryProvider).isFavourite(track.id)
+                        color: ref
+                                .watch(trackRepositoryProvider)
+                                .isFavourite(track.id)
                             ? AppColors.primaryAccent
                             : AppColors.secondaryText,
                         size: 20,
                       ),
                       onPressed: () async {
-                        await ref.read(trackRepositoryProvider).toggleFavourite(track.id);
+                        await ref
+                            .read(trackRepositoryProvider)
+                            .toggleFavourite(track.id);
                       },
                     ),
-                    onTap: () => audio.playTrack(track, queueContext: artistTracks),
+                    onTap: () =>
+                        audio.playTrack(track, queueContext: artistTracks),
                   );
                 },
                 childCount: artistTracks.length,

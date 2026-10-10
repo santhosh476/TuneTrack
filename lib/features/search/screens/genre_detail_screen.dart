@@ -15,14 +15,18 @@ class GenreDetailScreen extends ConsumerWidget {
   const GenreDetailScreen({
     super.key,
     required this.genreName,
-    this.gradientColors = const [AppColors.secondaryAccent, AppColors.primaryBackground],
+    this.gradientColors = const [
+      AppColors.secondaryAccent,
+      AppColors.primaryBackground
+    ],
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final allTracks = ref.watch(allTracksProvider);
     final q = genreName.toLowerCase().split(' ').first;
-    final genreTracks = allTracks.where((t) => t.genre.toLowerCase().contains(q)).toList();
+    final genreTracks =
+        allTracks.where((t) => t.genre.toLowerCase().contains(q)).toList();
     final audio = ref.read(audioPlayerServiceProvider);
 
     return Scaffold(
@@ -54,7 +58,8 @@ class GenreDetailScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(12),
@@ -71,12 +76,14 @@ class GenreDetailScreen extends ConsumerWidget {
                         const SizedBox(height: 8),
                         Text(
                           genreName,
-                          style: AppTypography.displayLarge.copyWith(fontWeight: FontWeight.w800),
+                          style: AppTypography.displayLarge
+                              .copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           '${genreTracks.length} tracks available in this genre',
-                          style: AppTypography.bodySmall.copyWith(color: AppColors.secondaryText),
+                          style: AppTypography.bodySmall
+                              .copyWith(color: AppColors.secondaryText),
                         ),
                       ],
                     ),
@@ -90,21 +97,25 @@ class GenreDetailScreen extends ConsumerWidget {
           if (genreTracks.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.shuffle_rounded, color: AppColors.secondaryText, size: 26),
+                      icon: const Icon(Icons.shuffle_rounded,
+                          color: AppColors.secondaryText, size: 26),
                       onPressed: () {
-                        final shuffled = List<TrackModel>.from(genreTracks)..shuffle();
+                        final shuffled = List<TrackModel>.from(genreTracks)
+                          ..shuffle();
                         audio.playTrack(shuffled.first, queueContext: shuffled);
                       },
                     ),
                     FloatingActionButton.small(
                       backgroundColor: AppColors.primaryAccent,
                       foregroundColor: Colors.black,
-                      onPressed: () => audio.playTrack(genreTracks.first, queueContext: genreTracks),
+                      onPressed: () => audio.playTrack(genreTracks.first,
+                          queueContext: genreTracks),
                       child: const Icon(Icons.play_arrow_rounded, size: 28),
                     ),
                   ],
@@ -118,7 +129,8 @@ class GenreDetailScreen extends ConsumerWidget {
               child: EmptyStateView(
                 icon: Icons.music_off_rounded,
                 title: 'No tracks found for $genreName',
-                description: 'Import local tracks with this genre to build your collection',
+                description:
+                    'Import local tracks with this genre to build your collection',
               ),
             )
           else
@@ -135,7 +147,8 @@ class GenreDetailScreen extends ConsumerWidget {
                     ),
                     title: Text(
                       track.title,
-                      style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w600),
+                      style: AppTypography.titleSmall
+                          .copyWith(fontWeight: FontWeight.w600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -148,16 +161,21 @@ class GenreDetailScreen extends ConsumerWidget {
                         ref.watch(trackRepositoryProvider).isFavourite(track.id)
                             ? Icons.favorite_rounded
                             : Icons.favorite_border_rounded,
-                        color: ref.watch(trackRepositoryProvider).isFavourite(track.id)
+                        color: ref
+                                .watch(trackRepositoryProvider)
+                                .isFavourite(track.id)
                             ? AppColors.primaryAccent
                             : AppColors.secondaryText,
                         size: 20,
                       ),
                       onPressed: () async {
-                        await ref.read(trackRepositoryProvider).toggleFavourite(track.id);
+                        await ref
+                            .read(trackRepositoryProvider)
+                            .toggleFavourite(track.id);
                       },
                     ),
-                    onTap: () => audio.playTrack(track, queueContext: genreTracks),
+                    onTap: () =>
+                        audio.playTrack(track, queueContext: genreTracks),
                   );
                 },
                 childCount: genreTracks.length,

@@ -127,7 +127,8 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                           .copyWith(fontWeight: FontWeight.w700),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: AppColors.secondaryAccent.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(10),
@@ -254,8 +255,8 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           if (stats.genreDistribution.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -294,8 +295,8 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                                   .take(4)
                                   .map((entry) {
                                 return Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 3.0),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 3.0),
                                   child: Row(
                                     children: [
                                       Container(
@@ -362,8 +363,8 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 (context, index) {
                   final item = stats.topTracks[index];
                   return Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     child: ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: Row(
@@ -439,8 +440,8 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 (context, index) {
                   final artist = stats.topArtists[index];
                   return Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     child: ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: SizedBox(
@@ -576,12 +577,14 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const Icon(Icons.insights_rounded, size: 16, color: AppColors.secondaryText),
+              const Icon(Icons.insights_rounded,
+                  size: 16, color: AppColors.secondaryText),
             ],
           ),
           Text(
             item.metricValue,
-            style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold),
+            style:
+                AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

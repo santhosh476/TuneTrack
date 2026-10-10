@@ -7,8 +7,10 @@ import '../../../core/utils/date_formatter.dart';
 import '../../../core/utils/duration_formatter.dart';
 import '../../../core/widgets/section_header.dart';
 import '../../../core/widgets/network_or_asset_image.dart';
+import '../../../data/models/track_model.dart';
 import '../../../data/models/stats_summary_model.dart';
 import '../../library/screens/playlist_detail_screen.dart';
+import '../../profile/screens/spotify_connect_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -19,6 +21,9 @@ class HomeScreen extends ConsumerWidget {
     final tracks = ref.watch(allTracksProvider);
     final playlists = ref.watch(playlistsProvider);
     final stats = ref.watch(statsSummaryProvider(StatsTimeRange.day));
+    final spotifyConnected =
+        ref.watch(isSpotifyConnectedProvider).value ?? false;
+    final spotifyRepo = ref.watch(spotifyRepositoryProvider);
     final audio = ref.read(audioPlayerServiceProvider);
 
     final greeting = DateFormatter.getGreeting();
@@ -47,11 +52,20 @@ class HomeScreen extends ConsumerWidget {
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.history_rounded,
-                    color: AppColors.primaryText),
-                tooltip: 'Recent History',
+                icon: Icon(
+                  Icons.sync_rounded,
+                  color: spotifyConnected
+                      ? const Color(0xFF1DB954)
+                      : AppColors.secondaryText,
+                ),
+                tooltip:
+                    spotifyConnected ? 'Spotify Connected' : 'Connect Spotify',
                 onPressed: () {
-                  // Jump or show history
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const SpotifyConnectScreen(),
+                    ),
+                  );
                 },
               ),
               IconButton(
@@ -159,6 +173,7 @@ class HomeScreen extends ConsumerWidget {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final p = playlists[index % playlists.length];
+                    final isSpotify = p.id.startsWith('spotify_ply_');
                     return Container(
                       decoration: BoxDecoration(
                         color: AppColors.surface,
@@ -186,15 +201,34 @@ class HomeScreen extends ConsumerWidget {
                                   topLeft: Radius.circular(8),
                                   bottomLeft: Radius.circular(8),
                                 ),
+                                placeholderIcon: isSpotify
+                                    ? Icons.graphic_eq_rounded
+                                    : Icons.queue_music_rounded,
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: Text(
-                                  p.title,
-                                  style: AppTypography.titleSmall
-                                      .copyWith(fontWeight: FontWeight.w600),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      p.title,
+                                      style: AppTypography.titleSmall.copyWith(
+                                          fontWeight: FontWeight.w600),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      isSpotify ? 'Spotify' : 'Local',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: isSpotify
+                                            ? const Color(0xFF1DB954)
+                                            : AppColors.secondaryText,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                               const SizedBox(width: 4),
@@ -227,20 +261,46 @@ class HomeScreen extends ConsumerWidget {
                 itemCount: tracks.length,
                 itemBuilder: (context, index) {
                   final track = tracks[index];
+                  final isSpotify =
+                      track.sourceType == AudioSourceType.spotifyStream;
                   return Container(
                     width: 140,
                     margin: const EdgeInsets.symmetric(horizontal: 6),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(10),
-                      onTap: () => audio.playTrack(track, queueContext: tracks),
+                      onTap: () {
+                        if (isSpotify) {
+                          spotifyRepo.openInSpotify(track.audioUrl);
+                        } else {
+                          audio.playTrack(track, queueContext: tracks);
+                        }
+                      },
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          NetworkOrAssetImage(
-                            imageUrl: track.artworkUrl,
-                            width: 140,
-                            height: 140,
-                            borderRadius: BorderRadius.circular(10),
+                          Stack(
+                            children: [
+                              NetworkOrAssetImage(
+                                imageUrl: track.artworkUrl,
+                                width: 140,
+                                height: 140,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              if (isSpotify)
+                                Positioned(
+                                  top: 6,
+                                  right: 6,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF1DB954),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.open_in_new_rounded,
+                                        size: 12, color: Colors.black),
+                                  ),
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 8),
                           Text(
@@ -276,6 +336,8 @@ class HomeScreen extends ConsumerWidget {
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final track = tracks[index];
+                final isSpotify =
+                    track.sourceType == AudioSourceType.spotifyStream;
                 return ListTile(
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
@@ -285,24 +347,64 @@ class HomeScreen extends ConsumerWidget {
                     height: 48,
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  title: Text(
-                    track.title,
-                    style: AppTypography.titleSmall
-                        .copyWith(fontWeight: FontWeight.w600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          track.title,
+                          style: AppTypography.titleSmall
+                              .copyWith(fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (isSpotify) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color:
+                                const Color(0xFF1DB954).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: const Text('Spotify',
+                              style: TextStyle(
+                                  fontSize: 9,
+                                  color: Color(0xFF1DB954),
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ],
                   ),
                   subtitle: Text(
                     '${track.artistName} • ${DurationFormatter.formatMs(track.durationMs)}',
                     style: AppTypography.bodySmall,
                   ),
                   trailing: IconButton(
-                    icon: const Icon(Icons.play_arrow_rounded,
-                        color: AppColors.primaryAccent),
-                    onPressed: () =>
-                        audio.playTrack(track, queueContext: tracks),
+                    icon: Icon(
+                      isSpotify
+                          ? Icons.open_in_new_rounded
+                          : Icons.play_arrow_rounded,
+                      color: isSpotify
+                          ? const Color(0xFF1DB954)
+                          : AppColors.primaryAccent,
+                    ),
+                    onPressed: () {
+                      if (isSpotify) {
+                        spotifyRepo.openInSpotify(track.audioUrl);
+                      } else {
+                        audio.playTrack(track, queueContext: tracks);
+                      }
+                    },
                   ),
-                  onTap: () => audio.playTrack(track, queueContext: tracks),
+                  onTap: () {
+                    if (isSpotify) {
+                      spotifyRepo.openInSpotify(track.audioUrl);
+                    } else {
+                      audio.playTrack(track, queueContext: tracks);
+                    }
+                  },
                 );
               },
               childCount: tracks.length,

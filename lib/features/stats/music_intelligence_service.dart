@@ -16,32 +16,57 @@ class MusicIntelligenceService {
 
     final now = DateTime.now();
     final thisMonthStart = DateTime(now.year, now.month, 1);
-    final thisWeekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+    final thisWeekStart = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday - 1));
     final prevWeekStart = thisWeekStart.subtract(const Duration(days: 7));
 
     // 1. Top Artist This Month
-    final thisMonthSessions = sessions.where((s) => s.startedAt.toLocal().isAfter(thisMonthStart)).toList();
+    final thisMonthSessions = sessions
+        .where((s) => s.startedAt.toLocal().isAfter(thisMonthStart))
+        .toList();
     final Map<String, int> artistSecondsMonth = {};
     for (final s in thisMonthSessions) {
-      artistSecondsMonth[s.artistName] = (artistSecondsMonth[s.artistName] ?? 0) + s.audibleDurationSeconds;
+      artistSecondsMonth[s.artistName] =
+          (artistSecondsMonth[s.artistName] ?? 0) + s.audibleDurationSeconds;
     }
 
     String? topArtistMonth;
     int topArtistSecs = 0;
     if (artistSecondsMonth.isNotEmpty) {
-      final sortedArtists = artistSecondsMonth.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+      final sortedArtists = artistSecondsMonth.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
       topArtistMonth = sortedArtists.first.key;
       topArtistSecs = sortedArtists.first.value;
     }
 
     // 2. Most Active Day of Week
-    final Map<int, int> dayOfWeekSeconds = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0};
+    final Map<int, int> dayOfWeekSeconds = {
+      1: 0,
+      2: 0,
+      3: 0,
+      4: 0,
+      5: 0,
+      6: 0,
+      7: 0
+    };
     for (final s in sessions) {
       final weekday = s.startedAt.toLocal().weekday;
-      dayOfWeekSeconds[weekday] = (dayOfWeekSeconds[weekday] ?? 0) + s.audibleDurationSeconds;
+      dayOfWeekSeconds[weekday] =
+          (dayOfWeekSeconds[weekday] ?? 0) + s.audibleDurationSeconds;
     }
-    final mostActiveWeekdayNum = dayOfWeekSeconds.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
-    const weekdayNames = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final mostActiveWeekdayNum = dayOfWeekSeconds.entries
+        .reduce((a, b) => a.value >= b.value ? a : b)
+        .key;
+    const weekdayNames = [
+      '',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday'
+    ];
     final mostActiveDayName = weekdayNames[mostActiveWeekdayNum];
 
     // 3. Favourite Listening Period / Time of Day
@@ -56,27 +81,32 @@ class MusicIntelligenceService {
     for (final s in sessions) {
       final hour = s.startedAt.toLocal().hour;
       if (hour >= 5 && hour < 12) {
-        periodSeconds['Morning (5 AM - 12 PM)'] = periodSeconds['Morning (5 AM - 12 PM)']! + s.audibleDurationSeconds;
+        periodSeconds['Morning (5 AM - 12 PM)'] =
+            periodSeconds['Morning (5 AM - 12 PM)']! + s.audibleDurationSeconds;
       } else if (hour >= 12 && hour < 17) {
-        periodSeconds['Afternoon (12 PM - 5 PM)'] = periodSeconds['Afternoon (12 PM - 5 PM)']! + s.audibleDurationSeconds;
+        periodSeconds['Afternoon (12 PM - 5 PM)'] =
+            periodSeconds['Afternoon (12 PM - 5 PM)']! +
+                s.audibleDurationSeconds;
       } else if (hour >= 17 && hour < 22) {
-        periodSeconds['Evening (5 PM - 10 PM)'] = periodSeconds['Evening (5 PM - 10 PM)']! + s.audibleDurationSeconds;
+        periodSeconds['Evening (5 PM - 10 PM)'] =
+            periodSeconds['Evening (5 PM - 10 PM)']! + s.audibleDurationSeconds;
       } else {
-        periodSeconds['Late Night (10 PM - 5 AM)'] = periodSeconds['Late Night (10 PM - 5 AM)']! + s.audibleDurationSeconds;
+        periodSeconds['Late Night (10 PM - 5 AM)'] =
+            periodSeconds['Late Night (10 PM - 5 AM)']! +
+                s.audibleDurationSeconds;
       }
     }
-    final favouritePeriod = periodSeconds.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+    final favouritePeriod =
+        periodSeconds.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
 
     // 4. Period Change Percentage (This Week vs Previous Week)
     final thisWeekSecs = sessions
         .where((s) => s.startedAt.toLocal().isAfter(thisWeekStart))
         .fold<int>(0, (sum, s) => sum + s.audibleDurationSeconds);
-    final prevWeekSecs = sessions
-        .where((s) {
-          final local = s.startedAt.toLocal();
-          return local.isAfter(prevWeekStart) && local.isBefore(thisWeekStart);
-        })
-        .fold<int>(0, (sum, s) => sum + s.audibleDurationSeconds);
+    final prevWeekSecs = sessions.where((s) {
+      final local = s.startedAt.toLocal();
+      return local.isAfter(prevWeekStart) && local.isBefore(thisWeekStart);
+    }).fold<int>(0, (sum, s) => sum + s.audibleDurationSeconds);
 
     double changePct = 0.0;
     if (prevWeekSecs > 0) {
@@ -90,9 +120,13 @@ class MusicIntelligenceService {
     final uniqueTracks = sessions.map((s) => s.trackId).toSet();
 
     // 6. Average Session Duration
-    final validSessions = sessions.where((s) => s.audibleDurationSeconds > 0).toList();
+    final validSessions =
+        sessions.where((s) => s.audibleDurationSeconds > 0).toList();
     final avgSessionMins = validSessions.isNotEmpty
-        ? (validSessions.fold<int>(0, (sum, s) => sum + s.audibleDurationSeconds) / validSessions.length) / 60.0
+        ? (validSessions.fold<int>(
+                    0, (sum, s) => sum + s.audibleDurationSeconds) /
+                validSessions.length) /
+            60.0
         : 0.0;
 
     // 7. Streak Milestones
@@ -162,7 +196,8 @@ class MusicIntelligenceService {
             : 'Your listening time decreased by ${changePct.abs().toStringAsFixed(0)}% this week.',
         metricValue: '$sign${changePct.toStringAsFixed(0)}%',
         category: 'habit',
-        iconName: changePct >= 0 ? 'trending_up_rounded' : 'trending_down_rounded',
+        iconName:
+            changePct >= 0 ? 'trending_up_rounded' : 'trending_down_rounded',
       ));
     }
 
@@ -170,7 +205,8 @@ class MusicIntelligenceService {
       insightItems.add(MusicInsightItem(
         id: 'ins_streak',
         title: 'Streak Milestone',
-        description: '$currentStreak day streak active. Next milestone: $nextMilestone days!',
+        description:
+            '$currentStreak day streak active. Next milestone: $nextMilestone days!',
         metricValue: '$currentStreak Days',
         subtitle: 'Target: $nextMilestone days',
         category: 'streak',

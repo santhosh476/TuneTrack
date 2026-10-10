@@ -39,6 +39,8 @@ class ListeningSessionModel {
       audibleDurationSeconds >= AppConstants.minListeningThresholdSeconds ||
       isCompleted;
 
+  DateTime get playedAt => startedAt;
+
   ListeningSessionModel copyWith({
     String? id,
     String? userId,

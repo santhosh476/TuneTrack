@@ -34,6 +34,7 @@ class TrackModel {
   });
 
   Duration get duration => Duration(milliseconds: durationMs);
+  String get audioUrl => audioSourceUrl;
 
   TrackModel copyWith({
     String? id,
