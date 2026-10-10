@@ -1,3 +1,6 @@
+
+import com.android.build.gradle.LibraryExtension
+
 allprojects {
     repositories {
         google()
@@ -9,10 +12,13 @@ val newBuildDir: Directory =
     rootProject.layout.buildDirectory
         .dir("../../build")
         .get()
+
 rootProject.layout.buildDirectory.value(newBuildDir)
 
 subprojects {
-    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
+    val newSubprojectBuildDir: Directory =
+        newBuildDir.dir(project.name)
+
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 
@@ -21,11 +27,9 @@ subprojects {
 }
 
 subprojects {
-    afterEvaluate {
-        if (project.plugins.hasPlugin("com.android.library")) {
-            project.extensions.findByType(com.android.build.gradle.LibraryExtension::class.java)?.apply {
-                compileSdk = 36
-            }
+    plugins.withId("com.android.library") {
+        extensions.configure<LibraryExtension> {
+            compileSdk = 36
         }
     }
 }
