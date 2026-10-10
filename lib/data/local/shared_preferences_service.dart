@@ -67,6 +67,59 @@ class SharedPreferencesService {
         AppConstants.keyLastSyncTime, time.toUtc().toIso8601String());
   }
 
+  // ==========================================
+  // ONBOARDING & AUTHENTICATION STATE
+  // ==========================================
+
+  bool isOnboardingCompleted() {
+    return _prefs.getBool('is_onboarding_completed') ?? false;
+  }
+
+  Future<bool> setOnboardingCompleted(bool completed) {
+    return _prefs.setBool('is_onboarding_completed', completed);
+  }
+
+  bool isLanguageOnboardingCompleted() {
+    return _prefs.getBool('is_language_onboarding_completed') ?? false;
+  }
+
+  Future<bool> setLanguageOnboardingCompleted(bool completed) {
+    return _prefs.setBool('is_language_onboarding_completed', completed);
+  }
+
+  String getAuthProvider() {
+    return _prefs.getString('auth_provider') ?? 'guest';
+  }
+
+  Future<bool> setAuthProvider(String provider) {
+    return _prefs.setString('auth_provider', provider);
+  }
+
+  // ==========================================
+  // LANGUAGE PERSONALIZATION
+  // ==========================================
+
+  List<String> getPreferredLanguages() {
+    return _prefs.getStringList('preferred_music_languages') ??
+        ['Tamil', 'English'];
+  }
+
+  Future<bool> setPreferredLanguages(List<String> languages) {
+    return _prefs.setStringList('preferred_music_languages', languages);
+  }
+
+  String getPrimaryLanguage() {
+    final list = getPreferredLanguages();
+    if (list.isNotEmpty) {
+      return _prefs.getString('primary_music_language') ?? list.first;
+    }
+    return 'Tamil';
+  }
+
+  Future<bool> setPrimaryLanguage(String language) {
+    return _prefs.setString('primary_music_language', language);
+  }
+
   List<String> getRecentSearches() {
     return _prefs.getStringList('recent_searches') ?? [];
   }

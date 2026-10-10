@@ -2,9 +2,13 @@
 class UserModel {
   final String id;
   final String email;
+  final String phoneNumber;
   final String displayName;
   final String? photoUrl;
   final bool isGuest;
+  final String authProvider; // 'guest', 'google', 'phone', 'email'
+  final List<String> preferredLanguages;
+  final String primaryLanguage;
   final bool isSpotifyConnected;
   final String? spotifyDisplayName;
   final String? spotifyEmail;
@@ -14,9 +18,13 @@ class UserModel {
   const UserModel({
     required this.id,
     this.email = '',
+    this.phoneNumber = '',
     required this.displayName,
     this.photoUrl,
     this.isGuest = true,
+    this.authProvider = 'guest',
+    this.preferredLanguages = const ['Tamil', 'English'],
+    this.primaryLanguage = 'Tamil',
     this.isSpotifyConnected = false,
     this.spotifyDisplayName,
     this.spotifyEmail,
@@ -27,9 +35,13 @@ class UserModel {
   UserModel copyWith({
     String? id,
     String? email,
+    String? phoneNumber,
     String? displayName,
     String? photoUrl,
     bool? isGuest,
+    String? authProvider,
+    List<String>? preferredLanguages,
+    String? primaryLanguage,
     bool? isSpotifyConnected,
     String? spotifyDisplayName,
     String? spotifyEmail,
@@ -39,9 +51,13 @@ class UserModel {
     return UserModel(
       id: id ?? this.id,
       email: email ?? this.email,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
       displayName: displayName ?? this.displayName,
       photoUrl: photoUrl ?? this.photoUrl,
       isGuest: isGuest ?? this.isGuest,
+      authProvider: authProvider ?? this.authProvider,
+      preferredLanguages: preferredLanguages ?? this.preferredLanguages,
+      primaryLanguage: primaryLanguage ?? this.primaryLanguage,
       isSpotifyConnected: isSpotifyConnected ?? this.isSpotifyConnected,
       spotifyDisplayName: spotifyDisplayName ?? this.spotifyDisplayName,
       spotifyEmail: spotifyEmail ?? this.spotifyEmail,
@@ -54,9 +70,13 @@ class UserModel {
     return {
       'id': id,
       'email': email,
+      'phoneNumber': phoneNumber,
       'displayName': displayName,
       'photoUrl': photoUrl,
       'isGuest': isGuest ? 1 : 0,
+      'authProvider': authProvider,
+      'preferredLanguages': preferredLanguages,
+      'primaryLanguage': primaryLanguage,
       'isSpotifyConnected': isSpotifyConnected ? 1 : 0,
       'spotifyDisplayName': spotifyDisplayName,
       'spotifyEmail': spotifyEmail,
@@ -66,12 +86,23 @@ class UserModel {
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
+    final rawLanguages = map['preferredLanguages'];
+    List<String> languages = ['Tamil', 'English'];
+    if (rawLanguages is List) {
+      languages = rawLanguages.map((e) => e.toString()).toList();
+    }
+
     return UserModel(
       id: map['id'] as String,
       email: map['email'] as String? ?? '',
+      phoneNumber: map['phoneNumber'] as String? ?? '',
       displayName: map['displayName'] as String? ?? 'Guest Listener',
       photoUrl: map['photoUrl'] as String?,
       isGuest: (map['isGuest'] == 1 || map['isGuest'] == true),
+      authProvider: map['authProvider'] as String? ?? 'guest',
+      preferredLanguages: languages,
+      primaryLanguage: map['primaryLanguage'] as String? ??
+          (languages.isNotEmpty ? languages.first : 'Tamil'),
       isSpotifyConnected:
           (map['isSpotifyConnected'] == 1 || map['isSpotifyConnected'] == true),
       spotifyDisplayName: map['spotifyDisplayName'] as String?,

@@ -18,6 +18,8 @@ class TrackModel {
   final bool isFavourite;
   final String genre;
   final DateTime addedAt;
+  final String? sourceDetailUrl;
+  final String? license;
 
   const TrackModel({
     required this.id,
@@ -31,6 +33,8 @@ class TrackModel {
     this.isFavourite = false,
     this.genre = 'Unknown',
     required this.addedAt,
+    this.sourceDetailUrl,
+    this.license,
   });
 
   Duration get duration => Duration(milliseconds: durationMs);
@@ -48,6 +52,8 @@ class TrackModel {
     bool? isFavourite,
     String? genre,
     DateTime? addedAt,
+    String? sourceDetailUrl,
+    String? license,
   }) {
     return TrackModel(
       id: id ?? this.id,
@@ -61,6 +67,8 @@ class TrackModel {
       isFavourite: isFavourite ?? this.isFavourite,
       genre: genre ?? this.genre,
       addedAt: addedAt ?? this.addedAt,
+      sourceDetailUrl: sourceDetailUrl ?? this.sourceDetailUrl,
+      license: license ?? this.license,
     );
   }
 
@@ -77,6 +85,8 @@ class TrackModel {
       'isFavourite': isFavourite ? 1 : 0,
       'genre': genre,
       'addedAt': addedAt.toIso8601String(),
+      'sourceDetailUrl': sourceDetailUrl,
+      'license': license,
     };
   }
 
@@ -98,6 +108,8 @@ class TrackModel {
       addedAt: map['addedAt'] != null
           ? DateTime.tryParse(map['addedAt'] as String) ?? DateTime.now()
           : DateTime.now(),
+      sourceDetailUrl: map['sourceDetailUrl'] as String?,
+      license: map['license'] as String?,
     );
   }
 }

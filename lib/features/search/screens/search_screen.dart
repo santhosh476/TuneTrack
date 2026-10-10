@@ -8,6 +8,8 @@ import '../../../core/utils/duration_formatter.dart';
 import '../../../core/widgets/empty_state_view.dart';
 import '../../../core/widgets/network_or_asset_image.dart';
 import '../../../data/models/track_model.dart';
+import '../../player/screens/youtube_music_player_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'genre_detail_screen.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
@@ -22,11 +24,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   Timer? _debounceTimer;
   String _query = '';
   int _searchSourceIndex = 0; // 0: All, 1: Online Public Catalog, 2: Local
-  final List<String> _searchSources = const [
-    'All Results',
-    'Online Music',
-    'Local Device Audio',
-  ];
 
   List<TrackModel> _localResults = [];
   List<TrackModel> _onlineResults = [];
@@ -128,9 +125,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final prefs = ref.watch(sharedPreferencesServiceProvider);
+    final user = ref.watch(currentUserProvider);
     final recentSearches = prefs.getRecentSearches();
     final audio = ref.read(audioPlayerServiceProvider);
     final isSearching = _query.isNotEmpty;
+
+    // Dynamic search sources including user's preferred languages
+    final preferredLangs = user.preferredLanguages.isNotEmpty
+        ? user.preferredLanguages
+        : ['Tamil', 'English'];
+    final allSources = [
+      'All Results',
+      'Online Music',
+      'Local Device Audio',
+      ...preferredLangs,
+    ];
 
     // Filter results based on selected search source chip
     List<TrackModel> displayedResults = [];
@@ -138,8 +147,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       displayedResults = [..._localResults, ..._onlineResults];
     } else if (_searchSourceIndex == 1) {
       displayedResults = _onlineResults;
-    } else {
+    } else if (_searchSourceIndex == 2) {
       displayedResults = _localResults;
+    } else {
+      // Filter by selected language
+      final selectedLanguage =
+          allSources[_searchSourceIndex % allSources.length].toLowerCase();
+      displayedResults = [..._localResults, ..._onlineResults].where((t) {
+        final text = '${t.title} ${t.artistName} ${t.albumName} ${t.genre}'
+            .toLowerCase();
+        return text.contains(selectedLanguage);
+      }).toList();
     }
 
     return Scaffold(
@@ -195,14 +213,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 child: ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   scrollDirection: Axis.horizontal,
-                  itemCount: _searchSources.length,
+                  itemCount: allSources.length,
                   itemBuilder: (context, index) {
                     final isSelected = _searchSourceIndex == index;
                     return Padding(
                       padding: const EdgeInsets.only(right: 8.0),
                       child: ChoiceChip(
                         label: Text(
-                          _searchSources[index],
+                          allSources[index],
                           style: AppTypography.labelSmall.copyWith(
                             color: isSelected
                                 ? Colors.black
@@ -225,6 +243,69 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       ),
                     );
                   },
+                ),
+              ),
+            ),
+
+          // 2.5 YouTube Video Discovery Banner (Option 2)
+          if (isSearching)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () async {
+                    final searchUrl = Uri.parse(
+                        'https://www.youtube.com/results?search_query=${Uri.encodeComponent("$_query song")}');
+                    if (await canLaunchUrl(searchUrl)) {
+                      await launchUrl(searchUrl,
+                          mode: LaunchMode.externalApplication);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.red.shade900.withValues(alpha: 0.35),
+                          AppColors.surface,
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: Colors.red.withValues(alpha: 0.4), width: 1),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.play_circle_filled,
+                            color: Colors.red, size: 28),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Watch & Listen "$_query" on YouTube',
+                                style: AppTypography.titleSmall.copyWith(
+                                    fontWeight: FontWeight.bold, fontSize: 13),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                'Official HD Music Videos & Lyric Videos',
+                                style: AppTypography.bodySmall.copyWith(
+                                    color: AppColors.secondaryText,
+                                    fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.open_in_new,
+                            color: AppColors.secondaryText, size: 16),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -312,14 +393,38 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           '${track.artistName} • ${DurationFormatter.formatMs(track.durationMs)}',
                           style: AppTypography.bodySmall,
                         ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.play_circle_filled_rounded,
-                              color: AppColors.primaryAccent, size: 30),
-                          onPressed: () {
-                            prefs.addRecentSearch(track.title);
-                            audio.playTrack(track,
-                                queueContext: displayedResults);
-                          },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Option 2: Watch on YouTube Button
+                            IconButton(
+                              icon: const Icon(Icons.video_library_outlined,
+                                  color: Colors.redAccent, size: 20),
+                              tooltip: 'Watch on YouTube',
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        YoutubeMusicPlayerScreen(
+                                      title: track.title,
+                                      artist: track.artistName,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            // Option 1: Full-Length Audio Stream in App
+                            IconButton(
+                              icon: const Icon(Icons.play_circle_filled_rounded,
+                                  color: AppColors.primaryAccent, size: 30),
+                              tooltip: 'Play Full Song',
+                              onPressed: () {
+                                prefs.addRecentSearch(track.title);
+                                audio.playTrack(track,
+                                    queueContext: displayedResults);
+                              },
+                            ),
+                          ],
                         ),
                         onTap: () {
                           prefs.addRecentSearch(track.title);

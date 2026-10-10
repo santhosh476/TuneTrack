@@ -10,6 +10,7 @@ import '../../../core/widgets/network_or_asset_image.dart';
 import '../../../data/models/track_model.dart';
 import '../../../data/models/stats_summary_model.dart';
 import '../../library/screens/playlist_detail_screen.dart';
+import '../../onboarding/screens/language_onboarding_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -21,36 +22,81 @@ class HomeScreen extends ConsumerWidget {
     final playlists = ref.watch(playlistsProvider);
     final stats = ref.watch(statsSummaryProvider(StatsTimeRange.day));
     final audio = ref.read(audioPlayerServiceProvider);
+    final recommendedAsync = ref.watch(recommendedTracksFutureProvider);
 
     final greeting = DateFormatter.getGreeting();
+    final preferredLanguages = user.preferredLanguages.isNotEmpty
+        ? user.preferredLanguages
+        : ['Tamil', 'English'];
+
+    // Separate local vs online tracks
+    final localTracks = tracks
+        .where((t) =>
+            t.sourceType == AudioSourceType.localFile ||
+            t.sourceType == AudioSourceType.demoAsset)
+        .toList();
 
     return Scaffold(
       backgroundColor: AppColors.primaryBackground,
       body: CustomScrollView(
         slivers: [
-          // 1. App Bar / Greeting
+          // 1. App Bar / Dynamic Greeting & Profile Info
           SliverAppBar(
             floating: true,
             backgroundColor: AppColors.primaryBackground,
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            title: Row(
               children: [
-                Text(
-                  greeting,
-                  style: AppTypography.displayMedium.copyWith(fontSize: 22),
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor:
+                      AppColors.primaryAccent.withValues(alpha: 0.2),
+                  child: Text(
+                    user.displayName.isNotEmpty
+                        ? user.displayName.substring(0, 1).toUpperCase()
+                        : 'T',
+                    style: const TextStyle(
+                      color: AppColors.primaryAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-                Text(
-                  user.displayName,
-                  style: AppTypography.bodySmall
-                      .copyWith(color: AppColors.primaryAccent),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        greeting,
+                        style: AppTypography.displayMedium.copyWith(
+                            fontSize: 20, fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        '${user.displayName} • ${user.primaryLanguage}',
+                        style: AppTypography.labelSmall
+                            .copyWith(color: AppColors.primaryAccent),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
             actions: [
+              // Language Selector Action Chip
               IconButton(
-                icon: const Icon(Icons.notifications_outlined,
+                icon: const Icon(Icons.translate_rounded,
                     color: AppColors.primaryText),
-                onPressed: () {},
+                tooltip: 'Language Preferences',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const LanguageOnboardingScreen(
+                        isFromSettings: true,
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -203,49 +249,75 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
 
-          // 4. Featured Online Streams & Trending Tracks
+          // 4. Personalized Recommendations based on Preferred Languages
           SliverToBoxAdapter(
             child: SectionHeader(
-              title: 'Featured & Trending',
-              subtitle: 'Open public streaming catalogue & trending songs',
-              actionText: 'View All',
-              onAction: () {},
+              title: 'Recommended for You',
+              subtitle:
+                  'Tailored for ${user.primaryLanguage} & your favorite genres',
             ),
           ),
           SliverToBoxAdapter(
             child: SizedBox(
               height: 210,
-              child: Builder(
-                builder: (context) {
-                  final displayTracks = tracks;
-                  if (displayTracks.isEmpty) {
+              child: recommendedAsync.when(
+                data: (recs) {
+                  final list = recs.isNotEmpty ? recs : tracks;
+                  if (list.isEmpty) {
                     return const Center(
-                      child: Text(
-                          'No tracks available. Import or search online.',
+                      child: Text('No recommendations available yet.',
                           style: TextStyle(color: AppColors.secondaryText)),
                     );
                   }
                   return ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     scrollDirection: Axis.horizontal,
-                    itemCount: displayTracks.length,
+                    itemCount: list.length,
                     itemBuilder: (context, index) {
-                      final track = displayTracks[index];
+                      final track = list[index];
                       return Container(
                         width: 140,
                         margin: const EdgeInsets.symmetric(horizontal: 6),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(10),
-                          onTap: () => audio.playTrack(track,
-                              queueContext: displayTracks),
+                          onTap: () =>
+                              audio.playTrack(track, queueContext: list),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              NetworkOrAssetImage(
-                                imageUrl: track.artworkUrl,
-                                width: 140,
-                                height: 140,
-                                borderRadius: BorderRadius.circular(10),
+                              Stack(
+                                children: [
+                                  NetworkOrAssetImage(
+                                    imageUrl: track.artworkUrl,
+                                    width: 140,
+                                    height: 140,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  if (track.title.contains('(Preview)') ||
+                                      track.id.startsWith('itunes_'))
+                                    Positioned(
+                                      top: 6,
+                                      right: 6,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 5, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.75),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: const Text(
+                                          'Preview',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.orangeAccent,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
                               const SizedBox(height: 8),
                               Text(
@@ -268,15 +340,191 @@ class HomeScreen extends ConsumerWidget {
                     },
                   );
                 },
+                loading: () => const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.primaryAccent,
+                  ),
+                ),
+                error: (_, __) => ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: tracks.length,
+                  itemBuilder: (context, index) {
+                    final track = tracks[index];
+                    return Container(
+                      width: 140,
+                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () =>
+                            audio.playTrack(track, queueContext: tracks),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            NetworkOrAssetImage(
+                              imageUrl: track.artworkUrl,
+                              width: 140,
+                              height: 140,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              track.title,
+                              style: AppTypography.titleSmall
+                                  .copyWith(fontWeight: FontWeight.w600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              track.artistName,
+                              style: AppTypography.bodySmall,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
           ),
 
-          // 5. Quick Picks for You (All Tracks)
+          // 5. Dynamic Language-Based Sections
+          for (final lang in preferredLanguages.take(3)) ...[
+            SliverToBoxAdapter(
+              child: SectionHeader(
+                title: '$lang Melodies & Hits',
+                subtitle: 'Top streamable tracks in $lang',
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 200,
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    final langTracksAsync =
+                        ref.watch(languageTracksFutureProvider(lang));
+                    return langTracksAsync.when(
+                      data: (langTracks) {
+                        final items =
+                            langTracks.isNotEmpty ? langTracks : tracks;
+                        return ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          scrollDirection: Axis.horizontal,
+                          itemCount: items.length,
+                          itemBuilder: (context, index) {
+                            final track = items[index];
+                            return Container(
+                              width: 130,
+                              margin: const EdgeInsets.symmetric(horizontal: 6),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: () =>
+                                    audio.playTrack(track, queueContext: items),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    NetworkOrAssetImage(
+                                      imageUrl: track.artworkUrl,
+                                      width: 130,
+                                      height: 130,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      track.title,
+                                      style: AppTypography.titleSmall.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      track.artistName,
+                                      style: AppTypography.bodySmall
+                                          .copyWith(fontSize: 11),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                      loading: () => const Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primaryAccent,
+                          ),
+                        ),
+                      ),
+                      error: (_, __) => const SizedBox.shrink(),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+
+          // 6. Local Device Audio Section (Offline Playable)
+          if (localTracks.isNotEmpty) ...[
+            const SliverToBoxAdapter(
+              child: SectionHeader(
+                title: 'Local Music on Device',
+                subtitle: 'Offline playable tracks from local storage',
+              ),
+            ),
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final track = localTracks[index];
+                  return ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                    leading: NetworkOrAssetImage(
+                      imageUrl: track.artworkUrl,
+                      width: 48,
+                      height: 48,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    title: Text(
+                      track.title,
+                      style: AppTypography.titleSmall
+                          .copyWith(fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      '${track.artistName} • ${DurationFormatter.formatMs(track.durationMs)}',
+                      style: AppTypography.bodySmall,
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.play_arrow_rounded,
+                          color: AppColors.primaryAccent),
+                      onPressed: () =>
+                          audio.playTrack(track, queueContext: localTracks),
+                    ),
+                    onTap: () =>
+                        audio.playTrack(track, queueContext: localTracks),
+                  );
+                },
+                childCount: localTracks.length.clamp(0, 5),
+              ),
+            ),
+          ],
+
+          // 7. Quick Picks / All Tracks List
           const SliverToBoxAdapter(
             child: SectionHeader(
-              title: 'Quick Picks for You',
-              subtitle: 'From your device library and recent streams',
+              title: 'All Music & Discoveries',
+              subtitle: 'From public catalog and your library',
             ),
           ),
           SliverList(
@@ -310,18 +558,28 @@ class HomeScreen extends ConsumerWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
-                          color: isOnline
-                              ? const Color(0xFF8E2DE2).withValues(alpha: 0.2)
-                              : AppColors.surfaceLight,
+                          color: track.title.contains('(Preview)') ||
+                                  track.id.startsWith('itunes_')
+                              ? Colors.orange.withValues(alpha: 0.2)
+                              : (isOnline
+                                  ? const Color(0xFF8E2DE2)
+                                      .withValues(alpha: 0.2)
+                                  : AppColors.surfaceLight),
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: Text(
-                          isOnline ? 'Online' : 'Local',
+                          track.title.contains('(Preview)') ||
+                                  track.id.startsWith('itunes_')
+                              ? 'Preview'
+                              : (isOnline ? 'Online' : 'Local'),
                           style: TextStyle(
                             fontSize: 9,
-                            color: isOnline
-                                ? const Color(0xFF8E2DE2)
-                                : AppColors.secondaryText,
+                            color: track.title.contains('(Preview)') ||
+                                    track.id.startsWith('itunes_')
+                                ? Colors.orangeAccent
+                                : (isOnline
+                                    ? const Color(0xFF8E2DE2)
+                                    : AppColors.secondaryText),
                             fontWeight: FontWeight.bold,
                           ),
                         ),

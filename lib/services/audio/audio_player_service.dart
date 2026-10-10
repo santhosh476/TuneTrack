@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_session/audio_session.dart';
 import '../../data/models/track_model.dart';
-import '../../data/local/app_database.dart';
 
 enum AudioRepeatMode {
   off,
@@ -11,10 +10,9 @@ enum AudioRepeatMode {
   one,
 }
 
-/// Core audio playback engine supporting full-length local audio files, complete network streams, and previews
+/// Core audio playback engine supporting local audio files, network streams, and demo assets
 class AudioPlayerService {
   final AudioPlayer _player;
-  final AppDatabase? _db;
 
   // State variables
   List<TrackModel> _queue = [];
@@ -23,7 +21,6 @@ class AudioPlayerService {
   AudioRepeatMode _repeatMode = AudioRepeatMode.off;
   Timer? _sleepTimer;
   DateTime? _sleepTimerTarget;
-  bool _isBuffering = false;
 
   // Stream controllers
   final _currentTrackController = StreamController<TrackModel?>.broadcast();
@@ -32,10 +29,8 @@ class AudioPlayerService {
   final _repeatController = StreamController<AudioRepeatMode>.broadcast();
   final _sleepTimerController = StreamController<DateTime?>.broadcast();
   final _trackCompletedController = StreamController<TrackModel>.broadcast();
-  final _bufferingController = StreamController<bool>.broadcast();
-  final _playbackErrorController = StreamController<String?>.broadcast();
 
-  AudioPlayerService([AudioPlayer? player, this._db])
+  AudioPlayerService([AudioPlayer? player])
       : _player = player ?? AudioPlayer() {
     _initAudioSession();
     _listenToPlayerEvents();
@@ -54,8 +49,6 @@ class AudioPlayerService {
   Stream<AudioRepeatMode> get repeatStream => _repeatController.stream;
   Stream<DateTime?> get sleepTimerStream => _sleepTimerController.stream;
   Stream<TrackModel> get onTrackCompleted => _trackCompletedController.stream;
-  Stream<bool> get bufferingStream => _bufferingController.stream;
-  Stream<String?> get playbackErrorStream => _playbackErrorController.stream;
 
   // Current State getters
   TrackModel? get currentTrack =>
@@ -65,7 +58,6 @@ class AudioPlayerService {
   List<TrackModel> get queue => List.unmodifiable(_queue);
   int get currentIndex => _currentIndex;
   bool get isPlaying => _player.playing;
-  bool get isBuffering => _isBuffering;
   bool get isShuffle => _isShuffle;
   AudioRepeatMode get repeatMode => _repeatMode;
   Duration get currentPosition => _player.position;
@@ -100,6 +92,7 @@ class AudioPlayerService {
               _player.setVolume(1.0);
               break;
             case AudioInterruptionType.pause:
+              // Optionally resume
               break;
             case AudioInterruptionType.unknown:
               break;
@@ -112,17 +105,21 @@ class AudioPlayerService {
   }
 
   void _listenToPlayerEvents() {
-    // 1. Processing state & completion
     _player.playerStateStream.listen((state) {
-      final isBuffering = state.processingState == ProcessingState.buffering ||
-          state.processingState == ProcessingState.loading;
-      if (isBuffering != _isBuffering) {
-        _isBuffering = isBuffering;
-        _bufferingController.add(_isBuffering);
-      }
-
       if (state.processingState == ProcessingState.completed) {
         final finishedTrack = currentTrack;
+        final pos = _player.position;
+        final reason = _repeatMode == AudioRepeatMode.one
+            ? 'Repeat One mode active (looping track)'
+            : (hasNext
+                ? 'Advancing to next track in queue'
+                : (_repeatMode == AudioRepeatMode.all
+                    ? 'Queue finished, repeating all from beginning'
+                    : 'End of queue reached (playback stopped)'));
+
+        debugPrint(
+            '⏹️ [AudioPlayerService] Playback Completed for "${finishedTrack?.title}" at position ${pos.inSeconds}s (Total: ${finishedTrack?.duration.inSeconds}s). Reason: $reason');
+
         if (finishedTrack != null) {
           _trackCompletedController.add(finishedTrack);
         }
@@ -130,21 +127,20 @@ class AudioPlayerService {
       }
     });
 
-    // 2. Real media duration synchronization from audio stream / file headers
-    _player.durationStream.listen((realDuration) {
-      if (realDuration != null && realDuration > Duration.zero) {
-        final track = currentTrack;
-        if (track != null && track.durationMs != realDuration.inMilliseconds) {
-          final updatedTrack =
-              track.copyWith(durationMs: realDuration.inMilliseconds);
-          if (_currentIndex >= 0 && _currentIndex < _queue.length) {
-            _queue[_currentIndex] = updatedTrack;
-            _currentTrackController.add(updatedTrack);
-            _queueController.add(_queue);
-          }
-          if (_db != null) {
-            _db.insertOrUpdateTrack(updatedTrack);
-          }
+    // Automatically sync real audio stream/file duration with current track model
+    _player.durationStream.listen((dur) {
+      if (dur != null &&
+          dur.inMilliseconds > 0 &&
+          _currentIndex >= 0 &&
+          _currentIndex < _queue.length) {
+        final current = _queue[_currentIndex];
+        if (current.durationMs != dur.inMilliseconds) {
+          debugPrint(
+              '⏱️ [AudioPlayerService] Stream duration updated from server stream headers: ${dur.inSeconds}s (${dur.inMilliseconds}ms) for "${current.title}"');
+          final updated = current.copyWith(durationMs: dur.inMilliseconds);
+          _queue[_currentIndex] = updated;
+          _currentTrackController.add(updated);
+          _queueController.add(_queue);
         }
       }
     });
@@ -199,22 +195,50 @@ class AudioPlayerService {
 
     _currentTrackController.add(track);
 
+    String urlType = 'Network Stream';
+    if (track.sourceType == AudioSourceType.localFile) {
+      urlType = 'Local File';
+    } else if (track.audioSourceUrl.contains('audius.co')) {
+      urlType = 'Audius Full-Length Stream';
+    } else if (track.audioSourceUrl.contains('itunes.apple.com') ||
+        track.title.contains('(Preview)')) {
+      urlType = 'iTunes 30-Second Preview Sample';
+    } else if (track.sourceType == AudioSourceType.demoAsset) {
+      urlType = 'Demo Audio Asset';
+    }
+
+    debugPrint(
+        '▶️ [AudioPlayerService] Loading track [${track.id}] "${track.title}" by ${track.artistName} | URL Type: $urlType | Expected Duration: ${track.duration.inSeconds}s (${track.durationMs}ms)');
+
     try {
-      _playbackErrorController.add(null);
+      Duration? loadedDuration;
       if (track.sourceType == AudioSourceType.localFile) {
         if (kIsWeb) {
-          await _player.setUrl(track.audioSourceUrl);
+          loadedDuration = await _player.setUrl(track.audioSourceUrl);
         } else {
-          await _player.setFilePath(track.audioSourceUrl);
+          loadedDuration = await _player.setFilePath(track.audioSourceUrl);
         }
       } else {
-        // Network stream (full song, radio, or open stream)
-        await _player.setUrl(track.audioSourceUrl);
+        // Network stream, full-length audio stream, or preview stream
+        loadedDuration = await _player.setUrl(track.audioSourceUrl);
       }
+
+      if (loadedDuration != null && loadedDuration.inMilliseconds > 0) {
+        debugPrint(
+            '✅ [AudioPlayerService] Player stream loaded successfully: actual duration = ${loadedDuration.inSeconds}s (${loadedDuration.inMilliseconds}ms)');
+        if (_currentIndex >= 0 && _currentIndex < _queue.length) {
+          final updated = _queue[_currentIndex].copyWith(
+            durationMs: loadedDuration.inMilliseconds,
+          );
+          _queue[_currentIndex] = updated;
+          _currentTrackController.add(updated);
+          _queueController.add(_queue);
+        }
+      }
+
       await _player.play();
     } catch (e) {
-      debugPrint('Error playing audio track: $e');
-      _playbackErrorController.add('Failed to play "${track.title}": $e');
+      debugPrint('❌ [AudioPlayerService] Error playing audio track: $e');
     }
   }
 
@@ -238,6 +262,9 @@ class AudioPlayerService {
   bool get hasPrevious => _currentIndex > 0;
 
   Future<void> next() async {
+    if (_player.position.inSeconds > 3) {
+      // Record partial listening session if appropriate
+    }
     if (hasNext) {
       _currentIndex++;
       await _loadAndPlayCurrent();
@@ -378,7 +405,5 @@ class AudioPlayerService {
     await _repeatController.close();
     await _sleepTimerController.close();
     await _trackCompletedController.close();
-    await _bufferingController.close();
-    await _playbackErrorController.close();
   }
 }

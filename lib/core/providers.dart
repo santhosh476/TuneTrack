@@ -94,6 +94,20 @@ final featuredOnlineTracksFutureProvider =
   return repo.getFeaturedOnlineTracks();
 });
 
+final recommendedTracksFutureProvider =
+    FutureProvider<List<TrackModel>>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  final repo = ref.watch(onlineMusicRepositoryProvider);
+  final primaryLang = user.primaryLanguage;
+  return repo.getCategoryTracks('$primaryLang Trending Hits');
+});
+
+final languageTracksFutureProvider =
+    FutureProvider.family<List<TrackModel>, String>((ref, language) async {
+  final repo = ref.watch(onlineMusicRepositoryProvider);
+  return repo.getCategoryTracks('$language Songs Beats');
+});
+
 // Legacy/Compatibility Spotify Services
 final spotifyAuthServiceProvider = Provider<SpotifyAuthService>((ref) {
   final secure = ref.watch(secureStorageServiceProvider);
@@ -257,9 +271,4 @@ final repeatStreamProvider = StreamProvider<AudioRepeatMode>((ref) {
 final sleepTimerStreamProvider = StreamProvider<DateTime?>((ref) {
   final audio = ref.watch(audioPlayerServiceProvider);
   return audio.sleepTimerStream;
-});
-
-final bufferingStreamProvider = StreamProvider<bool>((ref) {
-  final audio = ref.watch(audioPlayerServiceProvider);
-  return audio.bufferingStream;
 });

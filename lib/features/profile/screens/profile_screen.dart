@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/providers.dart';
-import '../../auth/screens/login_screen.dart';
+import '../../auth/screens/welcome_auth_screen.dart';
+import '../../onboarding/screens/language_onboarding_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -15,6 +16,19 @@ class ProfileScreen extends ConsumerWidget {
     final syncService = ref.watch(cloudSyncServiceProvider);
     final prefs = ref.watch(sharedPreferencesServiceProvider);
     final lastSync = prefs.getLastSyncTime();
+
+    String providerLabel = 'Guest (Local Storage)';
+    IconData providerIcon = Icons.person_outline_rounded;
+    if (user.authProvider == 'google') {
+      providerLabel = 'Google Account';
+      providerIcon = Icons.g_mobiledata_rounded;
+    } else if (user.authProvider == 'phone') {
+      providerLabel = 'Verified Phone Number';
+      providerIcon = Icons.phone_iphone_rounded;
+    } else if (user.authProvider == 'email') {
+      providerLabel = 'Email Account';
+      providerIcon = Icons.email_outlined;
+    }
 
     return Scaffold(
       backgroundColor: AppColors.primaryBackground,
@@ -42,7 +56,7 @@ class ProfileScreen extends ConsumerWidget {
                   child: Text(
                     user.displayName.isNotEmpty
                         ? user.displayName[0].toUpperCase()
-                        : 'U',
+                        : 'T',
                     style: AppTypography.displayMedium.copyWith(
                         color: Colors.black, fontWeight: FontWeight.bold),
                   ),
@@ -57,16 +71,32 @@ class ProfileScreen extends ConsumerWidget {
                         style: AppTypography.titleLarge
                             .copyWith(fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        user.isGuest
-                            ? 'Guest Mode (Offline-First)'
-                            : user.email,
-                        style: AppTypography.bodySmall.copyWith(
-                          color: user.isGuest
-                              ? AppColors.warning
-                              : AppColors.secondaryText,
-                        ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(providerIcon,
+                              size: 14,
+                              color: user.isGuest
+                                  ? AppColors.warning
+                                  : AppColors.primaryAccent),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              user.isGuest
+                                  ? providerLabel
+                                  : (user.phoneNumber.isNotEmpty
+                                      ? '${user.phoneNumber} ($providerLabel)'
+                                      : '${user.email} ($providerLabel)'),
+                              style: AppTypography.bodySmall.copyWith(
+                                color: user.isGuest
+                                    ? AppColors.warning
+                                    : AppColors.secondaryText,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -82,7 +112,7 @@ class ProfileScreen extends ConsumerWidget {
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                            builder: (context) => const LoginScreen()),
+                            builder: (context) => const WelcomeAuthScreen()),
                       );
                     },
                     child: const Text('Sign In'),
@@ -99,8 +129,70 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
 
-          // 2. Listening Preferences
-          Text('Listening Preferences',
+          // 2. Music Language Personalization Section
+          Text('Music Language Preferences',
+              style: AppTypography.titleMedium
+                  .copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Material(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.translate_rounded,
+                      color: AppColors.primaryAccent),
+                  title: Text('Preferred Languages',
+                      style: AppTypography.bodyLarge),
+                  subtitle: Text(
+                    user.preferredLanguages.isNotEmpty
+                        ? user.preferredLanguages.join(', ')
+                        : 'Tamil, English',
+                    style: AppTypography.bodySmall
+                        .copyWith(color: AppColors.primaryAccent),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded,
+                      color: AppColors.secondaryText),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const LanguageOnboardingScreen(
+                          isFromSettings: true,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.star_outline_rounded,
+                      color: Colors.amberAccent),
+                  title:
+                      Text('Primary Language', style: AppTypography.bodyLarge),
+                  subtitle: Text(
+                    user.primaryLanguage,
+                    style: AppTypography.bodySmall,
+                  ),
+                  trailing: TextButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const LanguageOnboardingScreen(
+                            isFromSettings: true,
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text('Change'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // 3. Listening Preferences
+          Text('Listening Goals & Habits',
               style: AppTypography.titleMedium
                   .copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
@@ -126,7 +218,7 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
 
-          // 3. Integrations & Cloud Sync
+          // 4. Integrations & Cloud Sync
           Text('Integrations & Sync',
               style: AppTypography.titleMedium
                   .copyWith(fontWeight: FontWeight.w700)),
@@ -141,7 +233,8 @@ class ProfileScreen extends ConsumerWidget {
                       color: AppColors.primaryAccent),
                   title: Text('Public Online Music Service',
                       style: AppTypography.bodyLarge),
-                  subtitle: Text('Open music catalogue • Zero API keys / Free',
+                  subtitle: Text(
+                      'Open Audius & Public catalogs • Zero API keys / Free',
                       style: AppTypography.bodySmall),
                   trailing: const Icon(Icons.check_circle_rounded,
                       color: AppColors.primaryAccent, size: 20),
@@ -178,7 +271,7 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
 
-          // 4. Privacy & Data
+          // 5. Privacy & Data
           Text('Privacy & Data',
               style: AppTypography.titleMedium
                   .copyWith(fontWeight: FontWeight.w700)),

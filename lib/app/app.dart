@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app/theme/app_theme.dart';
 import '../app/theme/app_colors.dart';
 import '../core/providers.dart';
+import '../features/auth/screens/welcome_auth_screen.dart';
+import '../features/onboarding/screens/language_onboarding_screen.dart';
 import '../features/home/screens/home_screen.dart';
 import '../features/search/screens/search_screen.dart';
 import '../features/library/screens/library_screen.dart';
@@ -18,13 +20,26 @@ class TuneTrackApp extends ConsumerWidget {
     // Eagerly initialize the active listening tracker
     ref.watch(listeningTrackerServiceProvider);
 
+    final prefs = ref.watch(sharedPreferencesServiceProvider);
+    final isOnboardingCompleted = prefs.isOnboardingCompleted();
+    final isLanguageOnboardingCompleted = prefs.isLanguageOnboardingCompleted();
+
+    Widget homeWidget;
+    if (!isOnboardingCompleted) {
+      homeWidget = const WelcomeAuthScreen();
+    } else if (!isLanguageOnboardingCompleted) {
+      homeWidget = const LanguageOnboardingScreen();
+    } else {
+      homeWidget = const MainNavigationShell();
+    }
+
     return MaterialApp(
       title: 'TuneTrack',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.dark,
-      home: const MainNavigationShell(),
+      home: homeWidget,
     );
   }
 }

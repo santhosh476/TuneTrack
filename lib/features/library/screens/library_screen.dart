@@ -364,19 +364,28 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
-                      color: isOnline
-                          ? const Color(0xFF8E2DE2).withValues(alpha: 0.2)
-                          : AppColors.surfaceLight,
+                      color: track.title.contains('(Preview)') ||
+                              track.id.startsWith('itunes_')
+                          ? Colors.orange.withValues(alpha: 0.2)
+                          : (isOnline
+                              ? const Color(0xFF8E2DE2).withValues(alpha: 0.2)
+                              : AppColors.surfaceLight),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      isOnline ? 'Online' : 'Local',
+                      track.title.contains('(Preview)') ||
+                              track.id.startsWith('itunes_')
+                          ? 'Preview'
+                          : (isOnline ? 'Online' : 'Local'),
                       style: TextStyle(
                         fontSize: 9,
                         fontWeight: FontWeight.bold,
-                        color: isOnline
-                            ? const Color(0xFF8E2DE2)
-                            : AppColors.secondaryText,
+                        color: track.title.contains('(Preview)') ||
+                                track.id.startsWith('itunes_')
+                            ? Colors.orangeAccent
+                            : (isOnline
+                                ? const Color(0xFF8E2DE2)
+                                : AppColors.secondaryText),
                       ),
                     ),
                   ),
