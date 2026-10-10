@@ -33,6 +33,7 @@ class AudioPlayerService {
   final _sleepTimerController = StreamController<DateTime?>.broadcast();
   final _trackCompletedController = StreamController<TrackModel>.broadcast();
   final _bufferingController = StreamController<bool>.broadcast();
+  final _playbackErrorController = StreamController<String?>.broadcast();
 
   AudioPlayerService([AudioPlayer? player, this._db])
       : _player = player ?? AudioPlayer() {
@@ -54,6 +55,7 @@ class AudioPlayerService {
   Stream<DateTime?> get sleepTimerStream => _sleepTimerController.stream;
   Stream<TrackModel> get onTrackCompleted => _trackCompletedController.stream;
   Stream<bool> get bufferingStream => _bufferingController.stream;
+  Stream<String?> get playbackErrorStream => _playbackErrorController.stream;
 
   // Current State getters
   TrackModel? get currentTrack =>
@@ -198,6 +200,7 @@ class AudioPlayerService {
     _currentTrackController.add(track);
 
     try {
+      _playbackErrorController.add(null);
       if (track.sourceType == AudioSourceType.localFile) {
         if (kIsWeb) {
           await _player.setUrl(track.audioSourceUrl);
@@ -211,6 +214,7 @@ class AudioPlayerService {
       await _player.play();
     } catch (e) {
       debugPrint('Error playing audio track: $e');
+      _playbackErrorController.add('Failed to play "${track.title}": $e');
     }
   }
 
@@ -375,5 +379,6 @@ class AudioPlayerService {
     await _sleepTimerController.close();
     await _trackCompletedController.close();
     await _bufferingController.close();
+    await _playbackErrorController.close();
   }
 }
