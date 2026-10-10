@@ -272,8 +272,12 @@ class AudioPlayerService {
     if (oldIndex < 0 ||
         oldIndex >= _queue.length ||
         newIndex < 0 ||
-        newIndex > _queue.length) return;
-    if (oldIndex < newIndex) newIndex -= 1;
+        newIndex > _queue.length) {
+      return;
+    }
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
     final item = _queue.removeAt(oldIndex);
     _queue.insert(newIndex, item);
 
