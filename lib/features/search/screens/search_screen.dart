@@ -21,49 +21,49 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounceTimer;
   String _query = '';
-  int _searchSourceIndex = 0; // 0: All, 1: Spotify, 2: Local
+  int _searchSourceIndex = 0; // 0: All, 1: Online Public Catalog, 2: Local
   final List<String> _searchSources = const [
     'All Results',
-    'Spotify Catalogue',
-    'Local Device Audio'
+    'Online Music',
+    'Local Device Audio',
   ];
 
   List<TrackModel> _localResults = [];
-  List<TrackModel> _spotifyResults = [];
-  bool _isLoadingSpotify = false;
+  List<TrackModel> _onlineResults = [];
+  bool _isLoadingOnline = false;
 
   final List<Map<String, dynamic>> _genres = const [
     {
-      'name': 'Synthwave',
-      'colors': [Color(0xFF8E2DE2), Color(0xFF4A00E0)]
-    },
-    {
-      'name': 'Ambient & Chill',
-      'colors': [Color(0xFF2193B0), Color(0xFF6DD5ED)]
-    },
-    {
-      'name': 'Lofi Beats',
+      'name': 'Tamil Hits',
       'colors': [Color(0xFFFF512F), Color(0xFFDD2476)]
     },
     {
-      'name': 'Electronic',
+      'name': 'Trending Pop',
+      'colors': [Color(0xFF8E2DE2), Color(0xFF4A00E0)]
+    },
+    {
+      'name': 'Lofi Beats',
       'colors': [Color(0xFF11998E), Color(0xFF38EF7D)]
     },
     {
-      'name': 'Acoustic',
+      'name': 'Synthwave',
+      'colors': [Color(0xFF4568DC), Color(0xFFB06AB3)]
+    },
+    {
+      'name': 'Acoustic & Chill',
+      'colors': [Color(0xFF2193B0), Color(0xFF6DD5ED)]
+    },
+    {
+      'name': 'Classical Focus',
       'colors': [Color(0xFFF7971E), Color(0xFFFFD200)]
+    },
+    {
+      'name': 'Electronic Beats',
+      'colors': [Color(0xFF3A6073), Color(0xFF3A7BD5)]
     },
     {
       'name': 'Hip-Hop',
       'colors': [Color(0xFFEB3349), Color(0xFFF45C43)]
-    },
-    {
-      'name': 'Rock & Indie',
-      'colors': [Color(0xFF4568DC), Color(0xFFB06AB3)]
-    },
-    {
-      'name': 'Jazz & Soul',
-      'colors': [Color(0xFF3A6073), Color(0xFF3A7BD5)]
     },
   ];
 
@@ -83,8 +83,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (text.trim().isEmpty) {
       setState(() {
         _localResults = [];
-        _spotifyResults = [];
-        _isLoadingSpotify = false;
+        _onlineResults = [];
+        _isLoadingOnline = false;
       });
       return;
     }
@@ -96,21 +96,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       _localResults = localMatches;
     });
 
-    // Debounced Spotify search (300ms)
-    _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
-      final spotifyRepo = ref.read(spotifyRepositoryProvider);
-      setState(() => _isLoadingSpotify = true);
+    // Debounced Online Public Catalogue search (350ms)
+    _debounceTimer = Timer(const Duration(milliseconds: 350), () async {
+      final onlineRepo = ref.read(onlineMusicRepositoryProvider);
+      setState(() => _isLoadingOnline = true);
       try {
-        final res = await spotifyRepo.searchSpotify(text.trim());
+        final matches = await onlineRepo.searchOnlineTracks(text.trim());
         if (mounted) {
           setState(() {
-            _spotifyResults = (res['tracks'] as List<TrackModel>?) ?? [];
+            _onlineResults = matches;
           });
         }
       } catch (_) {
-        if (mounted) setState(() => _spotifyResults = []);
+        if (mounted) setState(() => _onlineResults = []);
       } finally {
-        if (mounted) setState(() => _isLoadingSpotify = false);
+        if (mounted) setState(() => _isLoadingOnline = false);
       }
     });
   }
@@ -120,8 +120,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     setState(() {
       _query = '';
       _localResults = [];
-      _spotifyResults = [];
-      _isLoadingSpotify = false;
+      _onlineResults = [];
+      _isLoadingOnline = false;
     });
   }
 
@@ -130,15 +130,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final prefs = ref.watch(sharedPreferencesServiceProvider);
     final recentSearches = prefs.getRecentSearches();
     final audio = ref.read(audioPlayerServiceProvider);
-    final spotifyRepo = ref.read(spotifyRepositoryProvider);
     final isSearching = _query.isNotEmpty;
 
     // Filter results based on selected search source chip
     List<TrackModel> displayedResults = [];
     if (_searchSourceIndex == 0) {
-      displayedResults = [..._localResults, ..._spotifyResults];
+      displayedResults = [..._localResults, ..._onlineResults];
     } else if (_searchSourceIndex == 1) {
-      displayedResults = _spotifyResults;
+      displayedResults = _onlineResults;
     } else {
       displayedResults = _localResults;
     }
@@ -167,7 +166,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   onChanged: _onSearchChanged,
                   style: AppTypography.bodyLarge,
                   decoration: InputDecoration(
-                    hintText: 'Search songs, artists, or Spotify catalogue...',
+                    hintText: 'Search Tamil, Bollywood, Pop, Artists, Songs...',
                     hintStyle: AppTypography.bodyMedium
                         .copyWith(color: AppColors.tertiaryText),
                     prefixIcon: const Icon(Icons.search_rounded,
@@ -213,9 +212,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           ),
                         ),
                         selected: isSelected,
-                        selectedColor: index == 1
-                            ? const Color(0xFF1DB954)
-                            : AppColors.primaryAccent,
+                        selectedColor: AppColors.primaryAccent,
                         backgroundColor: AppColors.surface,
                         side: BorderSide.none,
                         shape: RoundedRectangleBorder(
@@ -234,7 +231,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
           // 3. Search Results View OR Browse Genres View
           if (isSearching) ...[
-            if (_isLoadingSpotify)
+            if (_isLoadingOnline)
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
@@ -243,19 +240,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Color(0xFF1DB954)),
+                          strokeWidth: 2, color: AppColors.primaryAccent),
                     ),
                   ),
                 ),
               ),
-            if (displayedResults.isEmpty && !_isLoadingSpotify)
+            if (displayedResults.isEmpty && !_isLoadingOnline)
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: EmptyStateView(
                   icon: Icons.search_off_rounded,
                   title: 'No results found',
                   description:
-                      'We couldn\'t find any matching tracks for "$_query". Try searching by another song or artist name.',
+                      'We couldn\'t find any matching tracks for "$_query". Try searching with another song or artist name.',
                 ),
               )
             else
@@ -263,8 +260,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final track = displayedResults[index];
-                    final isSpotify =
-                        track.sourceType == AudioSourceType.spotifyStream;
+                    final isOnline =
+                        track.sourceType == AudioSourceType.networkStream;
                     return Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 4),
@@ -292,19 +289,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: isSpotify
-                                    ? const Color(0xFF1DB954)
+                                color: isOnline
+                                    ? const Color(0xFF8E2DE2)
                                         .withValues(alpha: 0.2)
                                     : AppColors.surfaceLight,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
-                                isSpotify ? 'Spotify' : 'Local',
+                                isOnline ? 'Online' : 'Local',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: isSpotify
-                                      ? const Color(0xFF1DB954)
+                                  color: isOnline
+                                      ? const Color(0xFF8E2DE2)
                                       : AppColors.secondaryText,
                                 ),
                               ),
@@ -315,35 +312,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           '${track.artistName} • ${DurationFormatter.formatMs(track.durationMs)}',
                           style: AppTypography.bodySmall,
                         ),
-                        trailing: isSpotify
-                            ? IconButton(
-                                icon: const Icon(Icons.open_in_new_rounded,
-                                    color: Color(0xFF1DB954), size: 22),
-                                tooltip: 'Open in Spotify',
-                                onPressed: () {
-                                  prefs.addRecentSearch(track.title);
-                                  spotifyRepo.openInSpotify(track.audioUrl);
-                                },
-                              )
-                            : IconButton(
-                                icon: const Icon(
-                                    Icons.play_circle_filled_rounded,
-                                    color: AppColors.primaryAccent,
-                                    size: 30),
-                                onPressed: () {
-                                  prefs.addRecentSearch(track.title);
-                                  audio.playTrack(track,
-                                      queueContext: displayedResults);
-                                },
-                              ),
-                        onTap: () {
-                          prefs.addRecentSearch(track.title);
-                          if (isSpotify) {
-                            spotifyRepo.openInSpotify(track.audioUrl);
-                          } else {
+                        trailing: IconButton(
+                          icon: const Icon(Icons.play_circle_filled_rounded,
+                              color: AppColors.primaryAccent, size: 30),
+                          onPressed: () {
+                            prefs.addRecentSearch(track.title);
                             audio.playTrack(track,
                                 queueContext: displayedResults);
-                          }
+                          },
+                        ),
+                        onTap: () {
+                          prefs.addRecentSearch(track.title);
+                          audio.playTrack(track,
+                              queueContext: displayedResults);
                         },
                       ),
                     );

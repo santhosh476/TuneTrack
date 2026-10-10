@@ -10,7 +10,6 @@ import '../../../core/widgets/network_or_asset_image.dart';
 import '../../../data/models/track_model.dart';
 import '../../../data/models/stats_summary_model.dart';
 import '../../library/screens/playlist_detail_screen.dart';
-import '../../profile/screens/spotify_connect_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -21,9 +20,6 @@ class HomeScreen extends ConsumerWidget {
     final tracks = ref.watch(allTracksProvider);
     final playlists = ref.watch(playlistsProvider);
     final stats = ref.watch(statsSummaryProvider(StatsTimeRange.day));
-    final spotifyConnected =
-        ref.watch(isSpotifyConnectedProvider).value ?? false;
-    final spotifyRepo = ref.watch(spotifyRepositoryProvider);
     final audio = ref.read(audioPlayerServiceProvider);
 
     final greeting = DateFormatter.getGreeting();
@@ -51,23 +47,6 @@ class HomeScreen extends ConsumerWidget {
               ],
             ),
             actions: [
-              IconButton(
-                icon: Icon(
-                  Icons.sync_rounded,
-                  color: spotifyConnected
-                      ? const Color(0xFF1DB954)
-                      : AppColors.secondaryText,
-                ),
-                tooltip:
-                    spotifyConnected ? 'Spotify Connected' : 'Connect Spotify',
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const SpotifyConnectScreen(),
-                    ),
-                  );
-                },
-              ),
               IconButton(
                 icon: const Icon(Icons.notifications_outlined,
                     color: AppColors.primaryText),
@@ -159,7 +138,7 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
 
-          // 3. Quick Playlists Grid (Spotify Style 2x3 cards)
+          // 3. Quick Playlists Grid (2x3 cards)
           if (playlists.isNotEmpty)
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -173,7 +152,6 @@ class HomeScreen extends ConsumerWidget {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final p = playlists[index % playlists.length];
-                    final isSpotify = p.id.startsWith('spotify_ply_');
                     return Container(
                       decoration: BoxDecoration(
                         color: AppColors.surface,
@@ -201,34 +179,16 @@ class HomeScreen extends ConsumerWidget {
                                   topLeft: Radius.circular(8),
                                   bottomLeft: Radius.circular(8),
                                 ),
-                                placeholderIcon: isSpotify
-                                    ? Icons.graphic_eq_rounded
-                                    : Icons.queue_music_rounded,
+                                placeholderIcon: Icons.queue_music_rounded,
                               ),
                               const SizedBox(width: 8),
                               Expanded(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      p.title,
-                                      style: AppTypography.titleSmall.copyWith(
-                                          fontWeight: FontWeight.w600),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      isSpotify ? 'Spotify' : 'Local',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: isSpotify
-                                            ? const Color(0xFF1DB954)
-                                            : AppColors.secondaryText,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
+                                child: Text(
+                                  p.title,
+                                  style: AppTypography.titleSmall
+                                      .copyWith(fontWeight: FontWeight.w600),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               const SizedBox(width: 4),
@@ -243,42 +203,42 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
 
-          // 4. Recently Added & Trending Tracks
+          // 4. Featured Online Streams & Trending Tracks
           SliverToBoxAdapter(
             child: SectionHeader(
               title: 'Featured & Trending',
-              subtitle: 'Top hand-picked streams and local tracks',
+              subtitle: 'Open public streaming catalogue & trending songs',
               actionText: 'View All',
               onAction: () {},
             ),
           ),
           SliverToBoxAdapter(
             child: SizedBox(
-              height: 200,
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                scrollDirection: Axis.horizontal,
-                itemCount: tracks.length,
-                itemBuilder: (context, index) {
-                  final track = tracks[index];
-                  final isSpotify =
-                      track.sourceType == AudioSourceType.spotifyStream;
-                  return Container(
-                    width: 140,
-                    margin: const EdgeInsets.symmetric(horizontal: 6),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () {
-                        if (isSpotify) {
-                          spotifyRepo.openInSpotify(track.audioUrl);
-                        } else {
-                          audio.playTrack(track, queueContext: tracks);
-                        }
-                      },
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Stack(
+              height: 210,
+              child: Builder(
+                builder: (context) {
+                  final displayTracks = tracks;
+                  if (displayTracks.isEmpty) {
+                    return const Center(
+                      child: Text('No tracks available. Import or search online.',
+                          style: TextStyle(color: AppColors.secondaryText)),
+                    );
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: displayTracks.length,
+                    itemBuilder: (context, index) {
+                      final track = displayTracks[index];
+                      return Container(
+                        width: 140,
+                        margin: const EdgeInsets.symmetric(horizontal: 6),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () => audio.playTrack(track,
+                              queueContext: displayTracks),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               NetworkOrAssetImage(
                                 imageUrl: track.artworkUrl,
@@ -286,58 +246,44 @@ class HomeScreen extends ConsumerWidget {
                                 height: 140,
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              if (isSpotify)
-                                Positioned(
-                                  top: 6,
-                                  right: 6,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF1DB954),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.open_in_new_rounded,
-                                        size: 12, color: Colors.black),
-                                  ),
-                                ),
+                              const SizedBox(height: 8),
+                              Text(
+                                track.title,
+                                style: AppTypography.titleSmall
+                                    .copyWith(fontWeight: FontWeight.w600),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                track.artistName,
+                                style: AppTypography.bodySmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            track.title,
-                            style: AppTypography.titleSmall
-                                .copyWith(fontWeight: FontWeight.w600),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            track.artistName,
-                            style: AppTypography.bodySmall,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   );
                 },
               ),
             ),
           ),
 
-          // 5. Quick Picks List
+          // 5. Quick Picks for You (All Tracks)
           const SliverToBoxAdapter(
             child: SectionHeader(
               title: 'Quick Picks for You',
-              subtitle: 'Based on your recent listening activity',
+              subtitle: 'From your device library and recent streams',
             ),
           ),
           SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final track = tracks[index];
-                final isSpotify =
-                    track.sourceType == AudioSourceType.spotifyStream;
+                final isOnline =
+                    track.sourceType == AudioSourceType.networkStream;
                 return ListTile(
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
@@ -358,23 +304,27 @@ class HomeScreen extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (isSpotify) ...[
-                        const SizedBox(width: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(
-                            color:
-                                const Color(0xFF1DB954).withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          child: const Text('Spotify',
-                              style: TextStyle(
-                                  fontSize: 9,
-                                  color: Color(0xFF1DB954),
-                                  fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: isOnline
+                              ? const Color(0xFF8E2DE2).withValues(alpha: 0.2)
+                              : AppColors.surfaceLight,
+                          borderRadius: BorderRadius.circular(3),
                         ),
-                      ],
+                        child: Text(
+                          isOnline ? 'Online' : 'Local',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: isOnline
+                                ? const Color(0xFF8E2DE2)
+                                : AppColors.secondaryText,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   subtitle: Text(
@@ -382,29 +332,12 @@ class HomeScreen extends ConsumerWidget {
                     style: AppTypography.bodySmall,
                   ),
                   trailing: IconButton(
-                    icon: Icon(
-                      isSpotify
-                          ? Icons.open_in_new_rounded
-                          : Icons.play_arrow_rounded,
-                      color: isSpotify
-                          ? const Color(0xFF1DB954)
-                          : AppColors.primaryAccent,
-                    ),
-                    onPressed: () {
-                      if (isSpotify) {
-                        spotifyRepo.openInSpotify(track.audioUrl);
-                      } else {
-                        audio.playTrack(track, queueContext: tracks);
-                      }
-                    },
+                    icon: const Icon(Icons.play_arrow_rounded,
+                        color: AppColors.primaryAccent),
+                    onPressed: () =>
+                        audio.playTrack(track, queueContext: tracks),
                   ),
-                  onTap: () {
-                    if (isSpotify) {
-                      spotifyRepo.openInSpotify(track.audioUrl);
-                    } else {
-                      audio.playTrack(track, queueContext: tracks);
-                    }
-                  },
+                  onTap: () => audio.playTrack(track, queueContext: tracks),
                 );
               },
               childCount: tracks.length,

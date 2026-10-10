@@ -5,7 +5,6 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/providers.dart';
 import '../../auth/screens/login_screen.dart';
-import 'spotify_connect_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -138,20 +137,14 @@ class ProfileScreen extends ConsumerWidget {
             child: Column(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.music_note_rounded,
+                  leading: const Icon(Icons.public_rounded,
                       color: AppColors.primaryAccent),
-                  title: Text('Spotify Integration',
+                  title: Text('Public Online Music Service',
                       style: AppTypography.bodyLarge),
-                  subtitle: Text('Connect Spotify account & remote devices',
+                  subtitle: Text('Open music catalogue • Zero API keys / Free',
                       style: AppTypography.bodySmall),
-                  trailing: const Icon(Icons.chevron_right_rounded,
-                      color: AppColors.secondaryText),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (context) => const SpotifyConnectScreen()),
-                    );
-                  },
+                  trailing: const Icon(Icons.check_circle_rounded,
+                      color: AppColors.primaryAccent, size: 20),
                 ),
                 const Divider(height: 1),
                 ListTile(

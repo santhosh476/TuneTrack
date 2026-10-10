@@ -6,10 +6,8 @@ import '../../../core/providers.dart';
 import '../../../core/utils/duration_formatter.dart';
 import '../../../core/widgets/network_or_asset_image.dart';
 import '../../../core/widgets/empty_state_view.dart';
-import '../../../core/widgets/custom_button.dart';
 import '../../../data/models/track_model.dart';
 import '../../../data/models/playlist_model.dart';
-import '../../profile/screens/spotify_connect_screen.dart';
 import 'playlist_detail_screen.dart';
 import 'liked_songs_screen.dart';
 
@@ -22,11 +20,11 @@ class LibraryScreen extends ConsumerStatefulWidget {
 
 class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   int _selectedFilterIndex = 0;
-  bool _isSyncing = false;
+  bool _isRefreshing = false;
 
   final List<String> _filters = const [
     'All',
-    'Spotify',
+    'Online Music',
     'Local Music',
     'Playlists',
     'Favorites',
@@ -37,11 +35,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Widget build(BuildContext context) {
     final localPlaylists = ref.watch(playlistsProvider);
     final favTracks = ref.watch(favouriteTracksProvider);
-    final allLocalTracks = ref.watch(allTracksProvider);
-    final spotifyConnected =
-        ref.watch(isSpotifyConnectedProvider).value ?? false;
-    final spotifyRepo = ref.watch(spotifyRepositoryProvider);
+    final allTracks = ref.watch(allTracksProvider);
     final audio = ref.read(audioPlayerServiceProvider);
+
+    final localTracks = allTracks
+        .where((t) =>
+            t.sourceType == AudioSourceType.localFile ||
+            t.sourceType == AudioSourceType.demoAsset)
+        .toList();
 
     return Scaffold(
       backgroundColor: AppColors.primaryBackground,
@@ -50,25 +51,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         title: Text('Your Library',
             style: AppTypography.displayMedium.copyWith(fontSize: 24)),
         actions: [
-          if (_isSyncing)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 14),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Color(0xFF1DB954)),
-                ),
-              ),
-            )
-          else
-            IconButton(
-              icon:
-                  const Icon(Icons.sync_rounded, color: AppColors.primaryText),
-              tooltip: 'Sync Spotify & Library',
-              onPressed: () => _syncLibrary(context),
-            ),
           IconButton(
             icon: const Icon(Icons.add_rounded,
                 size: 28, color: AppColors.primaryText),
@@ -86,11 +68,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       body: RefreshIndicator(
         color: AppColors.primaryAccent,
         backgroundColor: AppColors.surfaceElevated,
-        onRefresh: () => _syncLibrary(context),
+        onRefresh: () => _refreshOnlineCatalogue(),
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // 1. Connection & Sync Status Banner
+            // 1. Connectivity Status Banner
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -107,44 +89,27 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       Container(
                         width: 8,
                         height: 8,
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           shape: BoxShape.circle,
-                          color: spotifyConnected
-                              ? const Color(0xFF1DB954)
-                              : Colors.grey,
+                          color: AppColors.primaryAccent,
                         ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          spotifyConnected
-                              ? 'Spotify Connected • Cloud Metadata Active'
-                              : 'Offline / Local Mode Active • Connect Spotify for Sync',
+                          'Open Public Music Engine Active • Zero Auth / Offline Capable',
                           style: AppTypography.bodySmall.copyWith(
-                            color: spotifyConnected
-                                ? AppColors.primaryText
-                                : AppColors.secondaryText,
+                            color: AppColors.primaryText,
                             fontSize: 12,
                           ),
                         ),
                       ),
-                      if (!spotifyConnected)
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const SpotifyConnectScreen(),
-                              ),
-                            );
-                          },
-                          child: Text(
-                            'Connect',
-                            style: AppTypography.labelSmall.copyWith(
-                              color: const Color(0xFF1DB954),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                      if (_isRefreshing)
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.primaryAccent),
                         ),
                     ],
                   ),
@@ -176,9 +141,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                           ),
                         ),
                         selected: isSelected,
-                        selectedColor: _filters[index] == 'Spotify'
-                            ? const Color(0xFF1DB954)
-                            : AppColors.primaryAccent,
+                        selectedColor: AppColors.primaryAccent,
                         backgroundColor: AppColors.surface,
                         side: BorderSide.none,
                         shape: RoundedRectangleBorder(
@@ -199,67 +162,18 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
             // 3. Render content according to selected filter
             if (_selectedFilterIndex == 0) ...[
-              // TAB 0: ALL (Combined Playlists & Quick Links)
+              // TAB 0: ALL
               _buildLikedSongsTile(context, favTracks.length),
               _buildSectionHeader('Playlists (${localPlaylists.length})'),
               _buildPlaylistsList(localPlaylists),
-              _buildSectionHeader('Device Tracks (${allLocalTracks.length})'),
-              _buildTracksList(allLocalTracks, audio, spotifyRepo),
+              _buildSectionHeader('All Tracks (${allTracks.length})'),
+              _buildTracksList(allTracks, audio),
             ] else if (_selectedFilterIndex == 1) ...[
-              // TAB 1: SPOTIFY
-              if (!spotifyConnected)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color:
-                                const Color(0xFF1DB954).withValues(alpha: 0.15),
-                          ),
-                          child: const Icon(Icons.music_note_rounded,
-                              size: 48, color: Color(0xFF1DB954)),
-                        ),
-                        const SizedBox(height: 16),
-                        Text('Connect Spotify Account',
-                            style: AppTypography.headlineSmall
-                                .copyWith(fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Sync your Spotify playlists, saved songs, and recently played tracks directly into TuneTrack.',
-                          textAlign: TextAlign.center,
-                          style: AppTypography.bodyMedium
-                              .copyWith(color: AppColors.secondaryText),
-                        ),
-                        const SizedBox(height: 24),
-                        CustomButton(
-                          text: 'Connect with Spotify (PKCE)',
-                          icon: Icons.link_rounded,
-                          backgroundColor: const Color(0xFF1DB954),
-                          textColor: Colors.black,
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                  builder: (context) =>
-                                      const SpotifyConnectScreen()),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else ...[
-                _buildSpotifyOverview(context, spotifyRepo),
-              ],
+              // TAB 1: ONLINE MUSIC (Public Catalogue)
+              _buildOnlineMusicOverview(context, audio),
             ] else if (_selectedFilterIndex == 2) ...[
               // TAB 2: LOCAL MUSIC
-              if (allLocalTracks.isEmpty)
+              if (localTracks.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: EmptyStateView(
@@ -272,7 +186,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   ),
                 )
               else
-                _buildTracksList(allLocalTracks, audio, spotifyRepo),
+                _buildTracksList(localTracks, audio),
             ] else if (_selectedFilterIndex == 3) ...[
               // TAB 3: PLAYLISTS
               if (localPlaylists.isEmpty)
@@ -303,10 +217,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   ),
                 )
               else
-                _buildTracksList(favTracks, audio, spotifyRepo),
+                _buildTracksList(favTracks, audio),
             ] else if (_selectedFilterIndex == 5) ...[
               // TAB 5: RECENTLY PLAYED
-              _buildRecentlyPlayedList(context, audio, spotifyRepo),
+              _buildRecentlyPlayedList(context, audio),
             ],
 
             const SliverToBoxAdapter(
@@ -345,7 +259,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             height: 56,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF450AF5), Color(0xFF8E8EE5)],
+                colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -376,7 +290,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       delegate: SliverChildBuilderDelegate(
         (context, index) {
           final p = playlists[index];
-          final isSpotify = p.id.startsWith('spotify_ply_');
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: ListTile(
@@ -386,46 +299,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 width: 56,
                 height: 56,
                 borderRadius: BorderRadius.circular(8),
-                placeholderIcon: isSpotify
-                    ? Icons.graphic_eq_rounded
-                    : Icons.queue_music_rounded,
+                placeholderIcon: Icons.queue_music_rounded,
               ),
-              title: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      p.title,
-                      style: AppTypography.titleMedium
-                          .copyWith(fontWeight: FontWeight.w600),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: isSpotify
-                          ? const Color(0xFF1DB954).withValues(alpha: 0.2)
-                          : AppColors.surfaceLight,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      isSpotify ? 'Spotify' : 'Local',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: isSpotify
-                            ? const Color(0xFF1DB954)
-                            : AppColors.secondaryText,
-                      ),
-                    ),
-                  ),
-                ],
+              title: Text(
+                p.title,
+                style: AppTypography.titleMedium
+                    .copyWith(fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               subtitle: Text(
-                '${p.trackIds.length} tracks • ${p.description.isNotEmpty ? p.description : "User playlist"}',
+                '${p.trackIds.length} tracks • ${p.description.isNotEmpty ? p.description : "Playlist"}',
                 style: AppTypography.bodySmall,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -448,13 +332,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  Widget _buildTracksList(
-      List<TrackModel> tracks, dynamic audio, dynamic spotifyRepo) {
+  Widget _buildTracksList(List<TrackModel> tracks, dynamic audio) {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
           final track = tracks[index];
-          final isSpotify = track.sourceType == AudioSourceType.spotifyStream;
+          final isOnline = track.sourceType == AudioSourceType.networkStream;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: ListTile(
@@ -465,38 +348,50 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 height: 48,
                 borderRadius: BorderRadius.circular(6),
               ),
-              title: Text(
-                track.title,
-                style: AppTypography.titleSmall
-                    .copyWith(fontWeight: FontWeight.w600),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      track.title,
+                      style: AppTypography.titleSmall
+                          .copyWith(fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: isOnline
+                          ? const Color(0xFF8E2DE2).withValues(alpha: 0.2)
+                          : AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      isOnline ? 'Online' : 'Local',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: isOnline
+                            ? const Color(0xFF8E2DE2)
+                            : AppColors.secondaryText,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               subtitle: Text(
                 '${track.artistName} • ${DurationFormatter.formatMs(track.durationMs)}',
                 style: AppTypography.bodySmall,
               ),
-              trailing: isSpotify
-                  ? IconButton(
-                      icon: const Icon(Icons.open_in_new_rounded,
-                          color: Color(0xFF1DB954), size: 22),
-                      tooltip: 'Open in Spotify',
-                      onPressed: () =>
-                          spotifyRepo.openInSpotify(track.audioUrl),
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.play_circle_filled_rounded,
-                          color: AppColors.primaryAccent, size: 28),
-                      onPressed: () =>
-                          audio.playTrack(track, queueContext: tracks),
-                    ),
-              onTap: () {
-                if (isSpotify) {
-                  spotifyRepo.openInSpotify(track.audioUrl);
-                } else {
-                  audio.playTrack(track, queueContext: tracks);
-                }
-              },
+              trailing: IconButton(
+                icon: const Icon(Icons.play_circle_filled_rounded,
+                    color: AppColors.primaryAccent, size: 28),
+                onPressed: () => audio.playTrack(track, queueContext: tracks),
+              ),
+              onTap: () => audio.playTrack(track, queueContext: tracks),
             ),
           );
         },
@@ -505,23 +400,31 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  Widget _buildSpotifyOverview(BuildContext context, dynamic spotifyRepo) {
+  Widget _buildOnlineMusicOverview(BuildContext context, dynamic audio) {
+    final onlineRepo = ref.watch(onlineMusicRepositoryProvider);
     return SliverToBoxAdapter(
-      child: FutureBuilder<Map<String, dynamic>>(
-        future: spotifyRepo.syncSpotifyData(),
+      child: FutureBuilder<List<TrackModel>>(
+        future: onlineRepo.getFeaturedOnlineTracks(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Padding(
               padding: EdgeInsets.all(32.0),
               child: Center(
-                child: CircularProgressIndicator(color: Color(0xFF1DB954)),
+                child:
+                    CircularProgressIndicator(color: AppColors.primaryAccent),
               ),
             );
           }
 
-          final data = snapshot.data ?? {};
-          final playlists = (data['playlists'] as List<PlaylistModel>?) ?? [];
-          final savedTracks = (data['savedTracks'] as List<TrackModel>?) ?? [];
+          final tracks = snapshot.data ?? [];
+          if (tracks.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Center(
+                  child:
+                      Text('No online tracks loaded. Tap Refresh or Search.')),
+            );
+          }
 
           return Padding(
             padding: const EdgeInsets.all(16.0),
@@ -531,79 +434,43 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Synced Spotify Playlists (${playlists.length})',
+                    Text('Featured Public Catalogue (${tracks.length})',
                         style: AppTypography.titleMedium
                             .copyWith(fontWeight: FontWeight.bold)),
                     TextButton.icon(
-                      onPressed: () => _syncLibrary(context),
+                      onPressed: () => _refreshOnlineCatalogue(),
                       icon: const Icon(Icons.refresh_rounded,
-                          size: 16, color: Color(0xFF1DB954)),
+                          size: 16, color: AppColors.primaryAccent),
                       label: Text('Refresh',
                           style: AppTypography.labelMedium
-                              .copyWith(color: const Color(0xFF1DB954))),
+                              .copyWith(color: AppColors.primaryAccent)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                if (playlists.isEmpty)
-                  Text('No public playlists found on your Spotify account.',
-                      style: AppTypography.bodySmall)
-                else
-                  ...playlists.map((p) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: NetworkOrAssetImage(
-                          imageUrl: p.coverUrl,
-                          width: 50,
-                          height: 50,
-                          borderRadius: BorderRadius.circular(6),
-                          placeholderIcon: Icons.music_note_rounded,
-                        ),
-                        title: Text(p.title,
-                            style: AppTypography.titleSmall
-                                .copyWith(fontWeight: FontWeight.w600)),
-                        subtitle: Text('${p.trackIds.length} tracks',
-                            style: AppTypography.bodySmall),
-                        trailing: const Icon(Icons.chevron_right_rounded,
-                            color: AppColors.secondaryText),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  PlaylistDetailScreen(playlistId: p.id),
-                            ),
-                          );
-                        },
-                      )),
-                const SizedBox(height: 16),
-                Text('Saved Spotify Tracks (${savedTracks.length})',
-                    style: AppTypography.titleMedium
-                        .copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                if (savedTracks.isEmpty)
-                  Text('No saved tracks found on Spotify.',
-                      style: AppTypography.bodySmall)
-                else
-                  ...savedTracks.take(15).map((t) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: NetworkOrAssetImage(
-                          imageUrl: t.artworkUrl,
-                          width: 44,
-                          height: 44,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        title: Text(t.title,
-                            style: AppTypography.titleSmall
-                                .copyWith(fontWeight: FontWeight.w600)),
-                        subtitle:
-                            Text(t.artistName, style: AppTypography.bodySmall),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.open_in_new_rounded,
-                              color: Color(0xFF1DB954), size: 20),
-                          onPressed: () =>
-                              spotifyRepo.openInSpotify(t.audioUrl),
-                        ),
-                        onTap: () => spotifyRepo.openInSpotify(t.audioUrl),
-                      )),
+                ...tracks.map((t) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: NetworkOrAssetImage(
+                        imageUrl: t.artworkUrl,
+                        width: 48,
+                        height: 48,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      title: Text(t.title,
+                          style: AppTypography.titleSmall
+                              .copyWith(fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      subtitle: Text('${t.artistName} • ${t.genre}',
+                          style: AppTypography.bodySmall),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.play_circle_filled_rounded,
+                            color: AppColors.primaryAccent, size: 26),
+                        onPressed: () =>
+                            audio.playTrack(t, queueContext: tracks),
+                      ),
+                      onTap: () => audio.playTrack(t, queueContext: tracks),
+                    )),
               ],
             ),
           );
@@ -612,8 +479,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  Widget _buildRecentlyPlayedList(
-      BuildContext context, dynamic audio, dynamic spotifyRepo) {
+  Widget _buildRecentlyPlayedList(BuildContext context, dynamic audio) {
     final sessionRepo = ref.watch(sessionRepositoryProvider);
     final user = ref.watch(currentUserProvider);
     final sessions = sessionRepo.getAllSessions(userId: user.id);
@@ -638,7 +504,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           final track = trackRepo.getTrackById(s.trackId);
           if (track == null) return const SizedBox.shrink();
 
-          final isSpotify = track.sourceType == AudioSourceType.spotifyStream;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: ListTile(
@@ -659,30 +524,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 style: AppTypography.bodySmall,
               ),
               trailing: IconButton(
-                icon: Icon(
-                  isSpotify
-                      ? Icons.open_in_new_rounded
-                      : Icons.play_circle_filled_rounded,
-                  color: isSpotify
-                      ? const Color(0xFF1DB954)
-                      : AppColors.primaryAccent,
-                  size: 26,
-                ),
-                onPressed: () {
-                  if (isSpotify) {
-                    spotifyRepo.openInSpotify(track.audioUrl);
-                  } else {
-                    audio.playTrack(track);
-                  }
-                },
+                icon: const Icon(Icons.play_circle_filled_rounded,
+                    color: AppColors.primaryAccent, size: 26),
+                onPressed: () => audio.playTrack(track),
               ),
-              onTap: () {
-                if (isSpotify) {
-                  spotifyRepo.openInSpotify(track.audioUrl);
-                } else {
-                  audio.playTrack(track);
-                }
-              },
+              onTap: () => audio.playTrack(track),
             ),
           );
         },
@@ -691,30 +537,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  Future<void> _syncLibrary(BuildContext context) async {
-    setState(() => _isSyncing = true);
+  Future<void> _refreshOnlineCatalogue() async {
+    setState(() => _isRefreshing = true);
     try {
-      final spotifyRepo = ref.read(spotifyRepositoryProvider);
-      final res = await spotifyRepo.syncSpotifyData();
-      if (context.mounted) {
-        if (res['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+      final onlineRepo = ref.read(onlineMusicRepositoryProvider);
+      final tracks = await onlineRepo.getFeaturedOnlineTracks();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
               content: Text(
-                  'Synced ${res['playlistsCount']} playlists and ${res['tracksCount']} tracks from Spotify!'),
-              backgroundColor: const Color(0xFF1DB954),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content:
-                    Text(res['message']?.toString() ?? 'Library updated.')),
-          );
-        }
+                  'Updated online catalogue with ${tracks.length} tracks!')),
+        );
       }
     } finally {
-      if (mounted) setState(() => _isSyncing = false);
+      if (mounted) setState(() => _isRefreshing = false);
     }
   }
 

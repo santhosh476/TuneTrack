@@ -8,6 +8,8 @@ import '../data/repositories/playlist_repository.dart';
 import '../data/repositories/listening_session_repository.dart';
 import '../data/repositories/user_repository.dart';
 import '../data/repositories/spotify_repository.dart';
+import '../data/repositories/online_music_repository.dart';
+import '../services/online/online_music_service.dart';
 import '../data/sync/firestore_service.dart';
 import '../data/sync/cloud_sync_service.dart';
 import '../data/models/track_model.dart';
@@ -75,7 +77,24 @@ final cloudSyncServiceProvider = Provider<CloudSyncService>((ref) {
   return CloudSyncService(db, prefs, firestore);
 });
 
-// 3. Spotify Services
+// 3. Online Music Service & Repository (Public zero-auth music catalog)
+final onlineMusicServiceProvider = Provider<OnlineMusicService>((ref) {
+  return OnlineMusicService();
+});
+
+final onlineMusicRepositoryProvider = Provider<OnlineMusicRepository>((ref) {
+  final service = ref.watch(onlineMusicServiceProvider);
+  final db = ref.watch(appDatabaseProvider);
+  return OnlineMusicRepository(service, db);
+});
+
+final featuredOnlineTracksFutureProvider =
+    FutureProvider<List<TrackModel>>((ref) async {
+  final repo = ref.watch(onlineMusicRepositoryProvider);
+  return repo.getFeaturedOnlineTracks();
+});
+
+// Legacy/Compatibility Spotify Services
 final spotifyAuthServiceProvider = Provider<SpotifyAuthService>((ref) {
   final secure = ref.watch(secureStorageServiceProvider);
   return SpotifyAuthService(secure);
