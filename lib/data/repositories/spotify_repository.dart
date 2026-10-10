@@ -76,10 +76,25 @@ class SpotifyRepository {
     }
 
     try {
-      final playlists = await _apiService.getUserPlaylists(token);
-      final savedTracks = await _apiService.getSavedTracks(token);
-      final recentTracks = await _apiService.getRecentlyPlayed(token);
-      final topTracks = await _apiService.getTopTracks(token);
+      List<PlaylistModel> playlists = [];
+      try {
+        playlists = await _apiService.getUserPlaylists(token);
+      } catch (_) {}
+
+      List<TrackModel> savedTracks = [];
+      try {
+        savedTracks = await _apiService.getSavedTracks(token);
+      } catch (_) {}
+
+      List<TrackModel> recentTracks = [];
+      try {
+        recentTracks = await _apiService.getRecentlyPlayed(token);
+      } catch (_) {}
+
+      List<TrackModel> topTracks = [];
+      try {
+        topTracks = await _apiService.getTopTracks(token);
+      } catch (_) {}
 
       final db = _db;
       if (db != null) {
