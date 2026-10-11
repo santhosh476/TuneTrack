@@ -56,6 +56,35 @@ class SecureStorageService {
     await _storage.delete(key: AppConstants.keySpotifyExpiresAt);
   }
 
+  Future<void> saveCustomApiKey(String service, String apiKey) async {
+    await _storage.write(key: 'custom_api_key_$service', value: apiKey);
+  }
+
+  Future<String?> getCustomApiKey(String service) async {
+    return _storage.read(key: 'custom_api_key_$service');
+  }
+
+  Future<void> saveSpotifyCredentials({
+    required String clientId,
+    String? clientSecret,
+  }) async {
+    await _storage.write(key: 'spotify_client_id', value: clientId.trim());
+    if (clientSecret != null && clientSecret.trim().isNotEmpty) {
+      await _storage.write(
+          key: 'spotify_client_secret', value: clientSecret.trim());
+    } else {
+      await _storage.delete(key: 'spotify_client_secret');
+    }
+  }
+
+  Future<String?> getSpotifyClientId() async {
+    return _storage.read(key: 'spotify_client_id');
+  }
+
+  Future<String?> getSpotifyClientSecret() async {
+    return _storage.read(key: 'spotify_client_secret');
+  }
+
   Future<void> clearAll() async {
     await _storage.deleteAll();
   }

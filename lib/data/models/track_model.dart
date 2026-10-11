@@ -3,6 +3,7 @@ enum AudioSourceType {
   networkStream,
   spotifyStream,
   demoAsset,
+  youtubeVideo,
 }
 
 /// Represents a single audio track in TuneTrack
@@ -20,6 +21,7 @@ class TrackModel {
   final DateTime addedAt;
   final String? sourceDetailUrl;
   final String? license;
+  final String? previewUrl;
 
   const TrackModel({
     required this.id,
@@ -35,10 +37,25 @@ class TrackModel {
     required this.addedAt,
     this.sourceDetailUrl,
     this.license,
+    this.previewUrl,
   });
 
   Duration get duration => Duration(milliseconds: durationMs);
   String get audioUrl => audioSourceUrl;
+
+  /// Returns YouTube Video ID if track is a YouTube video source
+  String? get youtubeVideoId {
+    if (sourceType == AudioSourceType.youtubeVideo) {
+      if (audioSourceUrl.contains('v=')) {
+        final uri = Uri.tryParse(audioSourceUrl);
+        return uri?.queryParameters['v'] ?? id.replaceFirst('yt_', '');
+      }
+      return audioSourceUrl.isNotEmpty
+          ? audioSourceUrl
+          : id.replaceFirst('yt_', '');
+    }
+    return null;
+  }
 
   TrackModel copyWith({
     String? id,
@@ -54,6 +71,7 @@ class TrackModel {
     DateTime? addedAt,
     String? sourceDetailUrl,
     String? license,
+    String? previewUrl,
   }) {
     return TrackModel(
       id: id ?? this.id,
@@ -69,6 +87,7 @@ class TrackModel {
       addedAt: addedAt ?? this.addedAt,
       sourceDetailUrl: sourceDetailUrl ?? this.sourceDetailUrl,
       license: license ?? this.license,
+      previewUrl: previewUrl ?? this.previewUrl,
     );
   }
 
@@ -87,6 +106,7 @@ class TrackModel {
       'addedAt': addedAt.toIso8601String(),
       'sourceDetailUrl': sourceDetailUrl,
       'license': license,
+      'previewUrl': previewUrl,
     };
   }
 
@@ -110,6 +130,7 @@ class TrackModel {
           : DateTime.now(),
       sourceDetailUrl: map['sourceDetailUrl'] as String?,
       license: map['license'] as String?,
+      previewUrl: map['previewUrl'] as String?,
     );
   }
 }

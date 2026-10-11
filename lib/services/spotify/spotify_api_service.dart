@@ -148,6 +148,8 @@ class SpotifyApiService {
           audioSourceUrl: trackObj['uri'] as String? ??
               trackObj['external_urls']?['spotify'] as String? ??
               '',
+          sourceDetailUrl: trackObj['external_urls']?['spotify'] as String?,
+          previewUrl: trackObj['preview_url'] as String?,
           genre: 'Spotify',
           addedAt: DateTime.now(),
         ));
@@ -206,6 +208,8 @@ class SpotifyApiService {
           audioSourceUrl: trackObj['uri'] as String? ??
               trackObj['external_urls']?['spotify'] as String? ??
               '',
+          sourceDetailUrl: trackObj['external_urls']?['spotify'] as String?,
+          previewUrl: trackObj['preview_url'] as String?,
           isFavourite: true,
           genre: 'Spotify',
           addedAt: DateTime.now(),
@@ -261,6 +265,8 @@ class SpotifyApiService {
           audioSourceUrl: trackObj['uri'] as String? ??
               trackObj['external_urls']?['spotify'] as String? ??
               '',
+          sourceDetailUrl: trackObj['external_urls']?['spotify'] as String?,
+          previewUrl: trackObj['preview_url'] as String?,
           genre: 'Spotify',
           addedAt: DateTime.now(),
         ));
@@ -318,6 +324,8 @@ class SpotifyApiService {
           audioSourceUrl: trackObj['uri'] as String? ??
               trackObj['external_urls']?['spotify'] as String? ??
               '',
+          sourceDetailUrl: trackObj['external_urls']?['spotify'] as String?,
+          previewUrl: trackObj['preview_url'] as String?,
           genre: 'Spotify Top',
           addedAt: DateTime.now(),
         ));
@@ -401,6 +409,8 @@ class SpotifyApiService {
           audioSourceUrl: item['uri'] as String? ??
               item['external_urls']?['spotify'] as String? ??
               '',
+          sourceDetailUrl: item['external_urls']?['spotify'] as String?,
+          previewUrl: item['preview_url'] as String?,
           genre: 'Spotify',
           addedAt: DateTime.now(),
         ));

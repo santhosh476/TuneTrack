@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,8 +46,8 @@ void main() {
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Search'), findsOneWidget);
     expect(find.text('Library'), findsOneWidget);
-    expect(find.text('Insights'), findsOneWidget);
-    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('Favorites'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
   });
 
   testWidgets(
@@ -75,8 +76,8 @@ void main() {
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Search'), findsOneWidget);
     expect(find.text('Library'), findsOneWidget);
-    expect(find.text('Insights'), findsOneWidget);
-    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('Favorites'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
 
     // Verify Home content
     expect(find.text('Daily Listening Goal'), findsOneWidget);
@@ -85,21 +86,20 @@ void main() {
     // Switch to Search Tab
     await tester.tap(find.text('Search'));
     await tester.pumpAndSettle();
-    expect(find.text('Explore Genres & Moods'), findsOneWidget);
+    expect(find.text('Explore Genres & Music Hubs'), findsOneWidget);
 
     // Switch to Library Tab
     await tester.tap(find.text('Library'));
     await tester.pumpAndSettle();
     expect(find.text('Liked Songs'), findsWidgets);
 
-    // Switch to Insights Tab
-    await tester.tap(find.text('Insights'));
+    // Switch to Favorites Tab
+    await tester.tap(find.byIcon(Icons.favorite_border_rounded));
     await tester.pumpAndSettle();
-    expect(find.text('Listening Time'), findsOneWidget);
-    expect(find.text('Valid Plays'), findsOneWidget);
+    expect(find.text('Liked Songs'), findsWidgets);
 
-    // Switch to Profile Tab
-    await tester.tap(find.text('Profile'));
+    // Switch to Settings Tab
+    await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
     expect(find.text('Music Language Preferences'), findsOneWidget);
     expect(find.text('Listening Goals & Habits'), findsOneWidget);

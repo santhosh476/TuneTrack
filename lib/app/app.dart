@@ -8,7 +8,7 @@ import '../features/onboarding/screens/language_onboarding_screen.dart';
 import '../features/home/screens/home_screen.dart';
 import '../features/search/screens/search_screen.dart';
 import '../features/library/screens/library_screen.dart';
-import '../features/stats/screens/stats_screen.dart';
+import '../features/library/screens/liked_songs_screen.dart';
 import '../features/profile/screens/profile_screen.dart';
 import '../features/player/widgets/mini_player.dart';
 
@@ -23,6 +23,7 @@ class TuneTrackApp extends ConsumerWidget {
     final prefs = ref.watch(sharedPreferencesServiceProvider);
     final isOnboardingCompleted = prefs.isOnboardingCompleted();
     final isLanguageOnboardingCompleted = prefs.isLanguageOnboardingCompleted();
+    final currentThemeMode = ref.watch(themeModeProvider);
 
     Widget homeWidget;
     if (!isOnboardingCompleted) {
@@ -36,9 +37,9 @@ class TuneTrackApp extends ConsumerWidget {
     return MaterialApp(
       title: 'TuneTrack',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.dark,
+      themeMode: currentThemeMode,
       home: homeWidget,
     );
   }
@@ -58,7 +59,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     HomeScreen(),
     SearchScreen(),
     LibraryScreen(),
-    StatsScreen(),
+    LikedSongsScreen(),
     ProfileScreen(),
   ];
 
@@ -115,16 +116,16 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
             label: 'Library',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.insights_outlined),
+            icon: Icon(Icons.favorite_border_rounded),
             activeIcon:
-                Icon(Icons.insights_rounded, color: AppColors.primaryAccent),
-            label: 'Insights',
+                Icon(Icons.favorite_rounded, color: AppColors.primaryAccent),
+            label: 'Favorites',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline_rounded),
+            icon: Icon(Icons.settings_outlined),
             activeIcon:
-                Icon(Icons.person_rounded, color: AppColors.primaryAccent),
-            label: 'Profile',
+                Icon(Icons.settings_rounded, color: AppColors.primaryAccent),
+            label: 'Settings',
           ),
         ],
       ),

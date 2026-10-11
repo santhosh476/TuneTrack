@@ -191,7 +191,42 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
 
-          // 3. Listening Preferences
+          // 3. Appearance & Theme
+          Text('Appearance',
+              style: AppTypography.titleMedium
+                  .copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Material(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(12),
+            child: Consumer(
+              builder: (context, ref, _) {
+                final themeMode = ref.watch(themeModeProvider);
+                final isDarkMode = themeMode == ThemeMode.dark;
+                return SwitchListTile(
+                  secondary: Icon(
+                    isDarkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                    color: isDarkMode ? AppColors.primaryAccent : Colors.orangeAccent,
+                  ),
+                  title: Text('Dark Theme', style: AppTypography.bodyLarge),
+                  subtitle: Text(
+                    isDarkMode
+                        ? 'AMOLED dark theme enabled'
+                        : 'Clean light theme enabled',
+                    style: AppTypography.bodySmall,
+                  ),
+                  value: isDarkMode,
+                  activeThumbColor: AppColors.primaryAccent,
+                  onChanged: (_) {
+                    ref.read(themeModeProvider.notifier).toggleTheme();
+                  },
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // 4. Listening Preferences
           Text('Listening Goals & Habits',
               style: AppTypography.titleMedium
                   .copyWith(fontWeight: FontWeight.w700)),
@@ -218,7 +253,7 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
 
-          // 4. Integrations & Cloud Sync
+          // 5. Integrations & Sync
           Text('Integrations & Sync',
               style: AppTypography.titleMedium
                   .copyWith(fontWeight: FontWeight.w700)),
@@ -229,12 +264,38 @@ class ProfileScreen extends ConsumerWidget {
             child: Column(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.public_rounded,
-                      color: AppColors.primaryAccent),
-                  title: Text('Public Online Music Service',
+                  leading: const Icon(Icons.smart_display_rounded,
+                      color: Colors.redAccent),
+                  title: Text('YouTube Data API v3',
                       style: AppTypography.bodyLarge),
                   subtitle: Text(
-                      'Open Audius & Public catalogs • Zero API keys / Free',
+                      'Official video discovery, search & verified durations',
+                      style: AppTypography.bodySmall),
+                  trailing: const Icon(Icons.chevron_right_rounded,
+                      color: AppColors.secondaryText),
+                  onTap: () => _showYouTubeApiKeyDialog(context, ref),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.music_note_rounded,
+                      color: Color(0xFF1DB954)),
+                  title: Text('Spotify Web API',
+                      style: AppTypography.bodyLarge),
+                  subtitle: Text(
+                      'Official search, album art, 30s previews & app handoff',
+                      style: AppTypography.bodySmall),
+                  trailing: const Icon(Icons.chevron_right_rounded,
+                      color: AppColors.secondaryText),
+                  onTap: () => _showSpotifyCredentialsDialog(context, ref),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.public_rounded,
+                      color: AppColors.primaryAccent),
+                  title: Text('Public Online Music Streams',
+                      style: AppTypography.bodyLarge),
+                  subtitle: Text(
+                      'Direct HTTPS streams & Audius catalog • Always Active',
                       style: AppTypography.bodySmall),
                   trailing: const Icon(Icons.check_circle_rounded,
                       color: AppColors.primaryAccent, size: 20),
@@ -421,6 +482,186 @@ class ProfileScreen extends ConsumerWidget {
               }
             },
             child: const Text('Clear', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showYouTubeApiKeyDialog(BuildContext context, WidgetRef ref) {
+    final secureStorage = ref.read(secureStorageServiceProvider);
+    final textController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.secondaryBackground,
+        title: const Row(
+          children: [
+            Icon(Icons.smart_display_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('YouTube API Key',
+                style: TextStyle(color: Colors.white, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your Google Cloud YouTube Data API v3 key to enable high-speed music search, exact durations, and official in-app video playback.',
+              style: TextStyle(color: AppColors.secondaryText, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: textController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'AIzaSy...',
+                hintStyle: const TextStyle(color: AppColors.tertiaryText),
+                filled: true,
+                fillColor: AppColors.surface,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.border)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style:
+                ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () async {
+              final key = textController.text.trim();
+              if (key.isNotEmpty) {
+                await secureStorage.saveCustomApiKey('youtube', key);
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('YouTube API key updated successfully!')),
+                  );
+                }
+              }
+            },
+            child:
+                const Text('Save Key', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSpotifyCredentialsDialog(BuildContext context, WidgetRef ref) {
+    final secureStorage = ref.read(secureStorageServiceProvider);
+    final clientIdController = TextEditingController();
+    final clientSecretController = TextEditingController();
+
+    secureStorage.getSpotifyClientId().then((id) {
+      if (id != null) clientIdController.text = id;
+    });
+    secureStorage.getSpotifyClientSecret().then((secret) {
+      if (secret != null) clientSecretController.text = secret;
+    });
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.secondaryBackground,
+        title: const Row(
+          children: [
+            Icon(Icons.music_note_rounded, color: Color(0xFF1DB954)),
+            SizedBox(width: 8),
+            Text('Spotify Web API',
+                style: TextStyle(color: Colors.white, fontSize: 18)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter Spotify Developer Client ID and Secret to enable search across 100M+ tracks, albums, playlists, 30s previews, and handoff.',
+                style: TextStyle(color: AppColors.secondaryText, fontSize: 13),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: clientIdController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Client ID',
+                  labelStyle: const TextStyle(color: AppColors.secondaryText),
+                  filled: true,
+                  fillColor: AppColors.surface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: clientSecretController,
+                obscureText: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Client Secret',
+                  labelStyle: const TextStyle(color: AppColors.secondaryText),
+                  filled: true,
+                  fillColor: AppColors.surface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1DB954),
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () async {
+              final clientId = clientIdController.text.trim();
+              final clientSecret = clientSecretController.text.trim();
+              if (clientId.isNotEmpty && clientSecret.isNotEmpty) {
+                await secureStorage.saveSpotifyCredentials(
+                  clientId: clientId,
+                  clientSecret: clientSecret,
+                );
+                final auth = ref.read(spotifyAuthServiceProvider);
+                final token = await auth.requestClientCredentialsToken(
+                  clientId: clientId,
+                  clientSecret: clientSecret,
+                );
+                final success = token != null;
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(success
+                          ? 'Spotify credentials verified and connected!'
+                          : 'Spotify credentials saved. Ready for search!'),
+                      backgroundColor: const Color(0xFF1DB954),
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Connect Spotify'),
           ),
         ],
       ),

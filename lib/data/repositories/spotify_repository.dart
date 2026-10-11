@@ -229,6 +229,16 @@ class SpotifyRepository {
     return [];
   }
 
+  Future<bool> connectWithClientCredentials(
+      String clientId, String clientSecret) async {
+    _clientId = clientId.trim();
+    final token = await _authService.requestClientCredentialsToken(
+      clientId: _clientId,
+      clientSecret: clientSecret.trim(),
+    );
+    return token != null;
+  }
+
   /// Search Spotify catalogue
   Future<Map<String, dynamic>> searchSpotify(String query,
       {int limit = 20}) async {
@@ -239,16 +249,21 @@ class SpotifyRepository {
         'artists': <ArtistModel>[],
         'albums': <AlbumModel>[],
         'playlists': <PlaylistModel>[],
+        'requiresAuth': true,
       };
     }
     try {
-      return await _apiService.search(token: token, query: query, limit: limit);
+      final res =
+          await _apiService.search(token: token, query: query, limit: limit);
+      res['requiresAuth'] = false;
+      return res;
     } catch (_) {
       return {
         'tracks': <TrackModel>[],
         'artists': <ArtistModel>[],
         'albums': <AlbumModel>[],
         'playlists': <PlaylistModel>[],
+        'requiresAuth': false,
       };
     }
   }

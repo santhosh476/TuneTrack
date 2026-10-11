@@ -5,7 +5,9 @@ import '../../../app/theme/app_typography.dart';
 import '../../../core/providers.dart';
 import '../../../core/utils/duration_formatter.dart';
 import '../../../core/widgets/network_or_asset_image.dart';
+import '../../../data/models/track_model.dart';
 import '../../../services/audio/audio_player_service.dart';
+import 'youtube_music_player_screen.dart';
 import 'queue_screen.dart';
 import 'sleep_timer_dialog.dart';
 
@@ -51,13 +53,41 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
 
     final isFav = ref.watch(trackRepositoryProvider).isFavourite(track.id);
 
+    final isBufferingAsync = ref.watch(isBufferingStreamProvider);
+    final isBuffering = isBufferingAsync.value ?? audio.isBuffering;
+
+    final volumeAsync = ref.watch(volumeStreamProvider);
+    final currentVolume = volumeAsync.value ?? audio.volume;
+
+    final isYouTube = track.sourceType == AudioSourceType.youtubeVideo;
+    final isSpotify = track.sourceType == AudioSourceType.spotifyStream;
+    final isStream = track.sourceType == AudioSourceType.networkStream;
+
+    Color badgeColor = const Color(0xFF00B4D8);
+    String badgeLabel = 'Local Audio File';
+    IconData badgeIcon = Icons.folder_rounded;
+
+    if (isYouTube) {
+      badgeColor = Colors.redAccent;
+      badgeLabel = 'YouTube Music Video';
+      badgeIcon = Icons.smart_display_rounded;
+    } else if (isSpotify) {
+      badgeColor = const Color(0xFF1DB954);
+      badgeLabel = 'Spotify Track';
+      badgeIcon = Icons.graphic_eq_rounded;
+    } else if (isStream) {
+      badgeColor = const Color(0xFF8E2DE2);
+      badgeLabel = 'Online Audio Stream';
+      badgeIcon = Icons.cloud_queue_rounded;
+    }
+
     return Scaffold(
       backgroundColor: AppColors.primaryBackground,
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              AppColors.surfaceElevated.withValues(alpha: 0.8),
+              badgeColor.withValues(alpha: 0.15),
               AppColors.primaryBackground,
               AppColors.primaryBackground,
             ],
@@ -107,111 +137,198 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                   ],
                 ),
 
-                // 2. Large Album Artwork
+                // 2. Large Album Artwork with Buffering Overlay
                 const Spacer(),
                 Container(
-                  width: MediaQuery.of(context).size.width * 0.78,
-                  height: MediaQuery.of(context).size.width * 0.78,
+                  width: MediaQuery.of(context).size.width * 0.74,
+                  height: MediaQuery.of(context).size.width * 0.74,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.6),
+                        color: badgeColor.withValues(alpha: 0.35),
                         blurRadius: 30,
-                        offset: const Offset(0, 16),
+                        offset: const Offset(0, 14),
                       ),
                     ],
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: NetworkOrAssetImage(
-                      imageUrl: track.artworkUrl,
-                      fit: BoxFit.cover,
-                      placeholderIcon: Icons.album_rounded,
-                    ),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: NetworkOrAssetImage(
+                            imageUrl: track.artworkUrl,
+                            fit: BoxFit.cover,
+                            placeholderIcon: Icons.album_rounded,
+                          ),
+                        ),
+                      ),
+                      if (isBuffering)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Center(
+                              child: SizedBox(
+                                width: 42,
+                                height: 42,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3.5,
+                                  color: AppColors.primaryAccent,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 const Spacer(),
 
-                // 3. Track Info & Favourite Button
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                // 3. Track Info, Favourite Button & Source Pill
+                Column(
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            track.title,
-                            style: AppTypography.displaySmall
-                                .copyWith(fontWeight: FontWeight.w700),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Flexible(
-                                child: Text(
-                                  track.artistName,
-                                  style: AppTypography.titleMedium
-                                      .copyWith(color: AppColors.secondaryText),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                              Text(
+                                track.title,
+                                style: AppTypography.displaySmall
+                                    .copyWith(fontWeight: FontWeight.w700),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              if (track.title.contains('(Preview)') ||
-                                  track.id.startsWith('itunes_')) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Text(
-                                    '30s Preview',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.orangeAccent,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                              const SizedBox(height: 4),
+                              Text(
+                                track.artistName,
+                                style: AppTypography.titleMedium
+                                    .copyWith(color: AppColors.secondaryText),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ],
                           ),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            isFav
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            color: isFav
+                                ? AppColors.primaryAccent
+                                : AppColors.secondaryText,
+                            size: 28,
+                          ),
+                          onPressed: () async {
+                            await ref
+                                .read(trackRepositoryProvider)
+                                .toggleFavourite(track.id);
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Dedicated Source Action Banner
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: badgeColor.withValues(alpha: 0.3), width: 0.8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(badgeIcon, size: 16, color: badgeColor),
+                              const SizedBox(width: 6),
+                              Text(
+                                badgeLabel,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: badgeColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (isYouTube)
+                            TextButton.icon(
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                              ),
+                              icon: const Icon(Icons.smart_display_rounded,
+                                  size: 16, color: Colors.redAccent),
+                              label: const Text('Watch Video',
+                                  style: TextStyle(
+                                      color: Colors.redAccent, fontSize: 11)),
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        YoutubeMusicPlayerScreen(
+                                      title: track.title,
+                                      artist: track.artistName,
+                                      videoId: track.youtubeVideoId,
+                                      videoUrl: track.sourceDetailUrl,
+                                      durationMs: track.durationMs,
+                                      artworkUrl: track.artworkUrl,
+                                      track: track,
+                                    ),
+                                  ),
+                                );
+                              },
+                            )
+                          else if (isSpotify)
+                            TextButton.icon(
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                              ),
+                              icon: const Icon(Icons.open_in_new_rounded,
+                                  size: 15, color: Color(0xFF1DB954)),
+                              label: const Text('Open Spotify',
+                                  style: TextStyle(
+                                      color: Color(0xFF1DB954), fontSize: 11)),
+                              onPressed: () {
+                                final repo = ref.read(spotifyRepositoryProvider);
+                                repo.openInSpotify(track.audioSourceUrl);
+                              },
+                            )
+                          else
+                            const Text(
+                              'Authorized Audio',
+                              style: TextStyle(
+                                  fontSize: 10, color: AppColors.secondaryText),
+                            ),
                         ],
                       ),
                     ),
-                    IconButton(
-                      icon: Icon(
-                        isFav
-                            ? Icons.favorite_rounded
-                            : Icons.favorite_border_rounded,
-                        color: isFav
-                            ? AppColors.primaryAccent
-                            : AppColors.secondaryText,
-                        size: 28,
-                      ),
-                      onPressed: () async {
-                        await ref
-                            .read(trackRepositoryProvider)
-                            .toggleFavourite(track.id);
-                      },
-                    ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
 
                 // 4. Seek Bar & Times
                 Column(
                   children: [
                     SliderTheme(
                       data: SliderTheme.of(context).copyWith(
-                        activeTrackColor: AppColors.primaryAccent,
+                        activeTrackColor: badgeColor,
                         inactiveTrackColor: AppColors.surfaceLight,
                         thumbColor: Colors.white,
                         trackHeight: 4,
@@ -256,7 +373,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
                 // 5. Main Controls (Shuffle, Previous, Play/Pause, Next, Repeat)
                 Row(
@@ -278,9 +395,16 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                       onPressed: () => audio.previous(),
                     ),
                     Container(
-                      decoration: const BoxDecoration(
-                        color: AppColors.primaryAccent,
+                      decoration: BoxDecoration(
+                        color: badgeColor,
                         shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: badgeColor.withValues(alpha: 0.4),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
                       child: IconButton(
                         iconSize: 42,
@@ -315,23 +439,76 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
 
-                // 6. Bottom Auxiliary Controls (Speed, Sleep Timer, Queue)
+                // 6. Interactive Volume Slider
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(
+                          currentVolume == 0.0
+                              ? Icons.volume_off_rounded
+                              : (currentVolume < 0.5
+                                  ? Icons.volume_down_rounded
+                                  : Icons.volume_up_rounded),
+                          size: 20,
+                          color: AppColors.secondaryText,
+                        ),
+                        onPressed: () {
+                          audio.setVolume(currentVolume > 0 ? 0.0 : 1.0);
+                        },
+                      ),
+                      Expanded(
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            trackHeight: 2.5,
+                            thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 4),
+                            activeTrackColor: AppColors.secondaryText,
+                            inactiveTrackColor: AppColors.surfaceLight,
+                            thumbColor: AppColors.primaryText,
+                          ),
+                          child: Slider(
+                            value: currentVolume.clamp(0.0, 1.0),
+                            min: 0.0,
+                            max: 1.0,
+                            onChanged: (val) => audio.setVolume(val),
+                          ),
+                        ),
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                        ),
+                        onPressed: () => _showSpeedSelector(context, audio),
+                        icon: const Icon(Icons.speed_rounded,
+                            size: 16, color: AppColors.secondaryText),
+                        label: Text('1.0x',
+                            style: AppTypography.bodySmall
+                                .copyWith(color: AppColors.secondaryText)),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 7. Auxiliary Actions (Sleep Timer, Queue, Retry)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    TextButton.icon(
-                      onPressed: () => _showSpeedSelector(context, audio),
-                      icon: const Icon(Icons.speed_rounded,
-                          size: 18, color: AppColors.secondaryText),
-                      label: Text('1.0x',
-                          style: AppTypography.bodySmall
-                              .copyWith(color: AppColors.secondaryText)),
+                    IconButton(
+                      icon: const Icon(Icons.refresh_rounded,
+                          color: AppColors.secondaryText, size: 20),
+                      tooltip: 'Retry Stream',
+                      onPressed: () => audio.retryCurrentTrack(),
                     ),
                     IconButton(
                       icon: const Icon(Icons.timer_outlined,
                           color: AppColors.secondaryText, size: 22),
+                      tooltip: 'Sleep Timer',
                       onPressed: () {
                         showDialog(
                           context: context,
@@ -342,6 +519,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                     IconButton(
                       icon: const Icon(Icons.queue_music_rounded,
                           color: AppColors.secondaryText, size: 24),
+                      tooltip: 'Playback Queue',
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(

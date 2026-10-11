@@ -12,185 +12,22 @@ class OnlineMusicService {
   OnlineMusicService([http.Client? client]) : _client = client ?? http.Client();
 
   static const String _audiusBaseUrl = 'https://api.audius.co/v1';
-  static const String _archiveSearchUrl =
-      'https://archive.org/advancedsearch.php';
-  static const String _archiveMetadataUrl = 'https://archive.org/metadata';
 
-  /// Search online catalogue. Prioritizes the Internet Archive public audio catalog,
-  /// verified full-length audio files, and open music catalogs.
+  /// Search online catalogue via Audius Open Catalog.
   /// Strictly returns 100% full-length streamable tracks with real durations.
   Future<List<TrackModel>> searchTracks(String query, {int limit = 25}) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return [];
 
     debugPrint(
-        '🔍 [OnlineMusicService] Searching Internet Archive & Open Catalog for: "$trimmed" (limit: $limit)');
+        '🔍 [OnlineMusicService] Searching Audius Open Catalog for: "$trimmed" (limit: $limit)');
 
-    // 1. Search Internet Archive candidate source
-    final archiveTracks =
-        await _searchInternetArchiveTracks(trimmed, limit: limit);
-
-    // 2. Also search Audius Open Catalog
     final audiusTracks = await _searchAudiusTracks(trimmed, limit: limit);
 
-    // Combine results (Internet Archive prioritized, followed by Audius open tracks)
-    final combined = <TrackModel>[...archiveTracks, ...audiusTracks];
-
     debugPrint(
-        '✅ [OnlineMusicService] Found ${combined.length} full-length verified tracks (${archiveTracks.length} from Internet Archive, ${audiusTracks.length} from Audius)');
+        '✅ [OnlineMusicService] Found ${audiusTracks.length} full-length verified tracks from Audius');
 
-    return combined.take(limit).toList();
-  }
-
-  /// Search Internet Archive public audio records
-  Future<List<TrackModel>> _searchInternetArchiveTracks(String query,
-      {int limit = 25}) async {
-    final searchUri = Uri.parse(_archiveSearchUrl).replace(
-      queryParameters: {
-        'q':
-            'mediatype:audio AND (title:($query) OR creator:($query) OR description:($query) OR $query)',
-        'fl[]':
-            'identifier,title,creator,year,licenseurl,description,downloads',
-        'sort[]': 'downloads desc',
-        'rows': limit.toString(),
-        'page': '1',
-        'output': 'json',
-      },
-    );
-
-    try {
-      final response =
-          await _client.get(searchUri).timeout(const Duration(seconds: 8));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final responseObj = data['response'] as Map<String, dynamic>?;
-        final docs = responseObj?['docs'] as List? ?? [];
-        final tracks = <TrackModel>[];
-
-        for (final doc in docs) {
-          if (doc == null) continue;
-          final identifier = doc['identifier'] as String?;
-          if (identifier == null || identifier.isEmpty) continue;
-
-          final itemTitle = doc['title'] as String? ?? 'Audio Track';
-          final creator =
-              doc['creator'] as String? ?? 'Internet Archive Contributor';
-          final licenseUrl = doc['licenseurl'] as String? ??
-              'https://creativecommons.org/publicdomain/zero/1.0/';
-          final artworkUrl = 'https://archive.org/services/img/$identifier';
-          final sourceDetailUrl = 'https://archive.org/details/$identifier';
-
-          // Fetch item metadata to extract playable audio files and verified duration
-          final itemTracks = await _fetchArchiveItemTracks(
-            identifier: identifier,
-            defaultTitle: itemTitle,
-            creator: creator,
-            licenseUrl: licenseUrl,
-            artworkUrl: artworkUrl,
-            sourceDetailUrl: sourceDetailUrl,
-          );
-
-          tracks.addAll(itemTracks);
-          if (tracks.length >= limit) break;
-        }
-
-        return tracks.take(limit).toList();
-      } else {
-        debugPrint(
-            '⚠️ [OnlineMusicService] Internet Archive search status: ${response.statusCode}');
-      }
-    } catch (e) {
-      debugPrint(
-          '⚠️ [OnlineMusicService] Internet Archive search exception: $e');
-    }
-    return [];
-  }
-
-  /// Fetch specific playable audio files from an Internet Archive item
-  Future<List<TrackModel>> _fetchArchiveItemTracks({
-    required String identifier,
-    required String defaultTitle,
-    required String creator,
-    required String licenseUrl,
-    required String artworkUrl,
-    required String sourceDetailUrl,
-  }) async {
-    final metaUri = Uri.parse('$_archiveMetadataUrl/$identifier');
-    try {
-      final response =
-          await _client.get(metaUri).timeout(const Duration(seconds: 6));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final files = data['files'] as List? ?? [];
-        final results = <TrackModel>[];
-
-        for (final file in files) {
-          if (file == null) continue;
-          final fileName = file['name'] as String?;
-          if (fileName == null || fileName.isEmpty) continue;
-
-          final format = (file['format'] as String? ?? '').toLowerCase();
-          // Filter only supported direct audio formats
-          final isAudio = format.contains('mp3') ||
-              format.contains('ogg') ||
-              format.contains('flac') ||
-              format.contains('vbr') ||
-              fileName.endsWith('.mp3') ||
-              fileName.endsWith('.ogg') ||
-              fileName.endsWith('.m4a');
-
-          if (!isAudio) continue;
-
-          // Extract verified duration in seconds
-          final rawLength = file['length'];
-          double durationSec = 0;
-          if (rawLength is num) {
-            durationSec = rawLength.toDouble();
-          } else if (rawLength is String) {
-            durationSec = double.tryParse(rawLength) ?? 0;
-          }
-
-          // Skip zero length or unverified audio files
-          if (durationSec <= 0) continue;
-          final durationMs = (durationSec * 1000).round();
-
-          final fileTitle = file['title'] as String? ??
-              fileName.replaceAll(RegExp(r'\.[a-zA-Z0-9]+$'), '');
-          final title = fileTitle.isNotEmpty ? fileTitle : defaultTitle;
-
-          // Construct direct public audio stream URL
-          final streamUrl =
-              'https://archive.org/download/$identifier/${Uri.encodeComponent(fileName)}';
-
-          debugPrint(
-              '🎵 [OnlineMusicService] IA Full Audio: "$title" by $creator | Duration: ${durationSec.round()}s (${durationMs}ms) | Stream: $streamUrl');
-
-          results.add(TrackModel(
-            id: 'ia_${identifier}_${fileName.hashCode.abs()}',
-            title: title,
-            artistName: creator,
-            albumName: defaultTitle,
-            durationMs: durationMs,
-            artworkUrl: artworkUrl,
-            sourceType: AudioSourceType.networkStream,
-            audioSourceUrl: streamUrl,
-            genre: 'Public Audio',
-            addedAt: DateTime.now(),
-            sourceDetailUrl: sourceDetailUrl,
-            license: licenseUrl,
-          ));
-
-          // Take at most 3 top tracks per collection item to maintain variety
-          if (results.length >= 3) break;
-        }
-
-        return results;
-      }
-    } catch (e) {
-      debugPrint(
-          '⚠️ [OnlineMusicService] IA metadata fetch failed for $identifier: $e');
-    }
-    return [];
+    return audiusTracks.take(limit).toList();
   }
 
   /// Search Audius open catalog for 100% full-length tracks with full audio streams

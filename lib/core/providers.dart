@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/local/app_database.dart';
@@ -22,6 +23,7 @@ import '../services/audio/audio_player_service.dart';
 import '../services/spotify/spotify_auth_service.dart';
 import '../services/spotify/spotify_api_service.dart';
 import '../services/authentication/firebase_auth_service.dart';
+import '../services/youtube/youtube_api_service.dart';
 import '../features/tracker/listening_tracker_service.dart';
 
 // 1. Storage & Services Providers
@@ -77,7 +79,38 @@ final cloudSyncServiceProvider = Provider<CloudSyncService>((ref) {
   return CloudSyncService(db, prefs, firestore);
 });
 
-// 3. Online Music Service & Repository (Public zero-auth music catalog)
+// 3. YouTube Data API v3 Service & Providers
+final youtubeApiServiceProvider = Provider<YouTubeApiService>((ref) {
+  final secure = ref.watch(secureStorageServiceProvider);
+  return YouTubeApiService(secureStorage: secure);
+});
+
+final youtubeSearchResultsFutureProvider =
+    FutureProvider.family<List<TrackModel>, String>((ref, query) async {
+  if (query.trim().isEmpty) return [];
+  final ytService = ref.watch(youtubeApiServiceProvider);
+  return ytService.searchMusicVideos(query.trim());
+});
+
+final youtubeRecommendationsFutureProvider =
+    FutureProvider<List<TrackModel>>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  final ytService = ref.watch(youtubeApiServiceProvider);
+  final languages = user.preferredLanguages.isNotEmpty
+      ? user.preferredLanguages
+      : ['Tamil', 'English'];
+  final primary =
+      user.primaryLanguage.isNotEmpty ? user.primaryLanguage : languages.first;
+  return ytService.searchMusicVideos('$primary Hits Trending', maxResults: 15);
+});
+
+final youtubeLanguageTracksFutureProvider =
+    FutureProvider.family<List<TrackModel>, String>((ref, language) async {
+  final ytService = ref.watch(youtubeApiServiceProvider);
+  return ytService.searchMusicVideos('$language Super Hits', maxResults: 15);
+});
+
+// 3.1 Online Music Service & Repository (Public zero-auth music catalog)
 final onlineMusicServiceProvider = Provider<OnlineMusicService>((ref) {
   return OnlineMusicService();
 });
@@ -272,3 +305,58 @@ final sleepTimerStreamProvider = StreamProvider<DateTime?>((ref) {
   final audio = ref.watch(audioPlayerServiceProvider);
   return audio.sleepTimerStream;
 });
+
+final isBufferingStreamProvider = StreamProvider<bool>((ref) {
+  final audio = ref.watch(audioPlayerServiceProvider);
+  return audio.isBufferingStream;
+});
+
+final volumeStreamProvider = StreamProvider<double>((ref) {
+  final audio = ref.watch(audioPlayerServiceProvider);
+  return audio.volumeStream;
+});
+
+final spotifySearchFutureProvider =
+    FutureProvider.family<Map<String, dynamic>, String>((ref, query) async {
+  if (query.trim().isEmpty) {
+    return {
+      'tracks': <TrackModel>[],
+      'artists': [],
+      'albums': [],
+      'playlists': [],
+      'requiresAuth': false,
+    };
+  }
+  final repo = ref.watch(spotifyRepositoryProvider);
+  return repo.searchSpotify(query.trim());
+});
+
+final themeModeProvider =
+    StateNotifierProvider<ThemeModeNotifier, ThemeMode>((ref) {
+  final prefs = ref.watch(sharedPreferencesServiceProvider);
+  return ThemeModeNotifier(prefs);
+});
+
+class ThemeModeNotifier extends StateNotifier<ThemeMode> {
+  final SharedPreferencesService _prefs;
+
+  ThemeModeNotifier(this._prefs)
+      : super(_prefs.isDarkMode() ? ThemeMode.dark : ThemeMode.light);
+
+  bool get isDark => state == ThemeMode.dark;
+
+  void toggleTheme() {
+    if (state == ThemeMode.dark) {
+      state = ThemeMode.light;
+      _prefs.setDarkMode(false);
+    } else {
+      state = ThemeMode.dark;
+      _prefs.setDarkMode(true);
+    }
+  }
+
+  void setTheme(ThemeMode mode) {
+    state = mode;
+    _prefs.setDarkMode(mode == ThemeMode.dark);
+  }
+}

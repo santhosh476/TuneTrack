@@ -11,9 +11,42 @@ import '../../../data/models/track_model.dart';
 import '../../../data/models/stats_summary_model.dart';
 import '../../library/screens/playlist_detail_screen.dart';
 import '../../onboarding/screens/language_onboarding_screen.dart';
+import '../../player/screens/youtube_music_player_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
+
+  void _playTrack(BuildContext context, WidgetRef ref, TrackModel track,
+      List<TrackModel> queue) {
+    if (track.sourceType == AudioSourceType.youtubeVideo) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => YoutubeMusicPlayerScreen(
+            title: track.title,
+            artist: track.artistName,
+            videoId: track.youtubeVideoId,
+            videoUrl: track.sourceDetailUrl,
+            durationMs: track.durationMs,
+            artworkUrl: track.artworkUrl,
+            track: track,
+          ),
+        ),
+      );
+    } else if (track.sourceType == AudioSourceType.spotifyStream &&
+        (track.previewUrl == null || track.previewUrl!.isEmpty) &&
+        track.audioSourceUrl.isEmpty) {
+      ref.read(spotifyRepositoryProvider).openInSpotify(track.sourceDetailUrl ?? track.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Opening "${track.title}" in Spotify...'),
+          backgroundColor: const Color(0xFF1DB954),
+        ),
+      );
+    } else {
+      final audio = ref.read(audioPlayerServiceProvider);
+      audio.playTrack(track, queueContext: queue);
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -280,8 +313,7 @@ class HomeScreen extends ConsumerWidget {
                         margin: const EdgeInsets.symmetric(horizontal: 6),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(10),
-                          onTap: () =>
-                              audio.playTrack(track, queueContext: list),
+                          onTap: () => _playTrack(context, ref, track, list),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -422,7 +454,7 @@ class HomeScreen extends ConsumerWidget {
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(10),
                                 onTap: () =>
-                                    audio.playTrack(track, queueContext: items),
+                                    _playTrack(context, ref, track, items),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -509,10 +541,9 @@ class HomeScreen extends ConsumerWidget {
                       icon: const Icon(Icons.play_arrow_rounded,
                           color: AppColors.primaryAccent),
                       onPressed: () =>
-                          audio.playTrack(track, queueContext: localTracks),
+                          _playTrack(context, ref, track, localTracks),
                     ),
-                    onTap: () =>
-                        audio.playTrack(track, queueContext: localTracks),
+                    onTap: () => _playTrack(context, ref, track, localTracks),
                   );
                 },
                 childCount: localTracks.length.clamp(0, 5),
@@ -531,6 +562,10 @@ class HomeScreen extends ConsumerWidget {
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final track = tracks[index];
+                final isYouTube =
+                    track.sourceType == AudioSourceType.youtubeVideo;
+                final isSpotify =
+                    track.sourceType == AudioSourceType.spotifyStream;
                 final isOnline =
                     track.sourceType == AudioSourceType.networkStream;
                 return ListTile(
@@ -558,28 +593,32 @@ class HomeScreen extends ConsumerWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
-                          color: track.title.contains('(Preview)') ||
-                                  track.id.startsWith('itunes_')
-                              ? Colors.orange.withValues(alpha: 0.2)
-                              : (isOnline
-                                  ? const Color(0xFF8E2DE2)
+                          color: isYouTube
+                              ? Colors.red.withValues(alpha: 0.2)
+                              : (isSpotify
+                                  ? const Color(0xFF1DB954)
                                       .withValues(alpha: 0.2)
-                                  : AppColors.surfaceLight),
+                                  : (isOnline
+                                      ? const Color(0xFF8E2DE2)
+                                          .withValues(alpha: 0.2)
+                                      : AppColors.surfaceLight)),
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: Text(
-                          track.title.contains('(Preview)') ||
-                                  track.id.startsWith('itunes_')
-                              ? 'Preview'
-                              : (isOnline ? 'Online' : 'Local'),
+                          isYouTube
+                              ? 'YouTube'
+                              : (isSpotify
+                                  ? 'Spotify'
+                                  : (isOnline ? 'Online' : 'Local')),
                           style: TextStyle(
                             fontSize: 9,
-                            color: track.title.contains('(Preview)') ||
-                                    track.id.startsWith('itunes_')
-                                ? Colors.orangeAccent
-                                : (isOnline
-                                    ? const Color(0xFF8E2DE2)
-                                    : AppColors.secondaryText),
+                            color: isYouTube
+                                ? Colors.redAccent
+                                : (isSpotify
+                                    ? const Color(0xFF1DB954)
+                                    : (isOnline
+                                        ? const Color(0xFF8E2DE2)
+                                        : AppColors.secondaryText)),
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -591,12 +630,21 @@ class HomeScreen extends ConsumerWidget {
                     style: AppTypography.bodySmall,
                   ),
                   trailing: IconButton(
-                    icon: const Icon(Icons.play_arrow_rounded,
-                        color: AppColors.primaryAccent),
-                    onPressed: () =>
-                        audio.playTrack(track, queueContext: tracks),
+                    icon: Icon(
+                      isYouTube
+                          ? Icons.smart_display_rounded
+                          : (isSpotify
+                              ? Icons.music_note_rounded
+                              : Icons.play_arrow_rounded),
+                      color: isYouTube
+                          ? Colors.redAccent
+                          : (isSpotify
+                              ? const Color(0xFF1DB954)
+                              : AppColors.primaryAccent),
+                    ),
+                    onPressed: () => _playTrack(context, ref, track, tracks),
                   ),
-                  onTap: () => audio.playTrack(track, queueContext: tracks),
+                  onTap: () => _playTrack(context, ref, track, tracks),
                 );
               },
               childCount: tracks.length,

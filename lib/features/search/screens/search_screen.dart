@@ -8,8 +8,9 @@ import '../../../core/utils/duration_formatter.dart';
 import '../../../core/widgets/empty_state_view.dart';
 import '../../../core/widgets/network_or_asset_image.dart';
 import '../../../data/models/track_model.dart';
+import '../../../data/models/playlist_model.dart';
+import '../../../services/youtube/youtube_api_service.dart';
 import '../../player/screens/youtube_music_player_screen.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'genre_detail_screen.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
@@ -23,11 +24,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounceTimer;
   String _query = '';
-  int _searchSourceIndex = 0; // 0: All, 1: Online Public Catalog, 2: Local
+  int _searchSourceIndex = 0; // 0: All, 1: YouTube, 2: Spotify, 3: Online Streams, 4: Local
 
   List<TrackModel> _localResults = [];
+  List<TrackModel> _youtubeResults = [];
+  String? _youtubeNextPageToken;
+  bool _isLoadingMoreYouTube = false;
+
   List<TrackModel> _onlineResults = [];
-  bool _isLoadingOnline = false;
+  List<TrackModel> _spotifyTracks = [];
+  bool _spotifyRequiresAuth = false;
+
+  List<String> _searchSuggestions = [];
+  bool _isLoadingSearch = false;
+  String? _quotaOrAuthWarning;
 
   final List<Map<String, dynamic>> _genres = const [
     {
@@ -39,28 +49,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       'colors': [Color(0xFF8E2DE2), Color(0xFF4A00E0)]
     },
     {
-      'name': 'Lofi Beats',
-      'colors': [Color(0xFF11998E), Color(0xFF38EF7D)]
+      'name': 'Hindi Bollywood',
+      'colors': [Color(0xFFFF7675), Color(0xFFD63031)]
     },
     {
-      'name': 'Synthwave',
-      'colors': [Color(0xFF4568DC), Color(0xFFB06AB3)]
-    },
-    {
-      'name': 'Acoustic & Chill',
-      'colors': [Color(0xFF2193B0), Color(0xFF6DD5ED)]
-    },
-    {
-      'name': 'Classical Focus',
+      'name': 'Telugu Hits',
       'colors': [Color(0xFFF7971E), Color(0xFFFFD200)]
     },
     {
-      'name': 'Electronic Beats',
-      'colors': [Color(0xFF3A6073), Color(0xFF3A7BD5)]
+      'name': 'Malayalam Melodies',
+      'colors': [Color(0xFF2193B0), Color(0xFF6DD5ED)]
     },
     {
-      'name': 'Hip-Hop',
-      'colors': [Color(0xFFEB3349), Color(0xFFF45C43)]
+      'name': 'Lofi & Chill Beats',
+      'colors': [Color(0xFF11998E), Color(0xFF38EF7D)]
+    },
+    {
+      'name': 'Kannada Super Hits',
+      'colors': [Color(0xFF8E2DE2), Color(0xFF4A00E0)]
+    },
+    {
+      'name': 'Classical Focus',
+      'colors': [Color(0xFF3A6073), Color(0xFF3A7BD5)]
     },
   ];
 
@@ -73,43 +83,122 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   void _onSearchChanged(String text) {
     _debounceTimer?.cancel();
+    final trimmed = text.trim();
     setState(() {
-      _query = text.trim();
+      _query = trimmed;
+      _quotaOrAuthWarning = null;
     });
 
-    if (text.trim().isEmpty) {
+    if (trimmed.isEmpty) {
       setState(() {
         _localResults = [];
+        _youtubeResults = [];
+        _youtubeNextPageToken = null;
         _onlineResults = [];
-        _isLoadingOnline = false;
+        _spotifyTracks = [];
+        _spotifyRequiresAuth = false;
+        _searchSuggestions = [];
+        _isLoadingSearch = false;
       });
       return;
     }
 
-    // Immediate local search
+    // 1. Immediate local library search
     final localRepo = ref.read(trackRepositoryProvider);
-    final localMatches = localRepo.searchTracks(text.trim());
     setState(() {
-      _localResults = localMatches;
+      _localResults = localRepo.searchTracks(trimmed);
     });
 
-    // Debounced Online Public Catalogue search (350ms)
-    _debounceTimer = Timer(const Duration(milliseconds: 350), () async {
-      final onlineRepo = ref.read(onlineMusicRepositoryProvider);
-      setState(() => _isLoadingOnline = true);
-      try {
-        final matches = await onlineRepo.searchOnlineTracks(text.trim());
-        if (mounted) {
-          setState(() {
-            _onlineResults = matches;
-          });
-        }
-      } catch (_) {
-        if (mounted) setState(() => _onlineResults = []);
-      } finally {
-        if (mounted) setState(() => _isLoadingOnline = false);
+    // 2. Fetch search suggestions fast
+    final youtubeService = ref.read(youtubeApiServiceProvider);
+    youtubeService.getSearchSuggestions(trimmed).then((suggestions) {
+      if (mounted && _query == trimmed) {
+        setState(() => _searchSuggestions = suggestions);
       }
     });
+
+    // 3. Debounced concurrent API queries across YouTube, Spotify & Audius
+    _debounceTimer = Timer(const Duration(milliseconds: 380), () async {
+      final onlineRepo = ref.read(onlineMusicRepositoryProvider);
+      final spotifyRepo = ref.read(spotifyRepositoryProvider);
+
+      setState(() => _isLoadingSearch = true);
+
+      try {
+        final ytFuture = youtubeService.searchMusicVideosWithPagination(
+          trimmed,
+          maxResults: 15,
+        );
+        final onlineFuture = onlineRepo.searchOnlineTracks(trimmed);
+        final spotifyFuture = spotifyRepo.searchSpotify(trimmed, limit: 15);
+
+        final results = await Future.wait([
+          ytFuture.catchError((e) {
+            if (e is YouTubeApiException) {
+              if (mounted) {
+                setState(() {
+                  _quotaOrAuthWarning = e.isConfigError
+                      ? 'YouTube API key not configured. Tap to enter your API key.'
+                      : 'YouTube daily quota reached. Enter your custom API key in Settings.';
+                });
+              }
+            }
+            return const YouTubeSearchResult(tracks: []);
+          }),
+          onlineFuture.catchError((_) => <TrackModel>[]),
+          spotifyFuture.catchError((_) => <String, dynamic>{
+                'tracks': <TrackModel>[],
+                'playlists': <PlaylistModel>[],
+                'requiresAuth': false,
+              }),
+        ]);
+
+        if (mounted) {
+          final ytResult = results[0] as YouTubeSearchResult;
+          final spotifyResult = results[2] as Map<String, dynamic>;
+
+          setState(() {
+            _youtubeResults = ytResult.tracks;
+            _youtubeNextPageToken = ytResult.nextPageToken;
+            _onlineResults = results[1] as List<TrackModel>;
+            _spotifyTracks = (spotifyResult['tracks'] as List?)?.cast<TrackModel>() ?? [];
+            _spotifyRequiresAuth = spotifyResult['requiresAuth'] as bool? ?? false;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _youtubeResults = [];
+            _onlineResults = [];
+            _spotifyTracks = [];
+          });
+        }
+      } finally {
+        if (mounted) setState(() => _isLoadingSearch = false);
+      }
+    });
+  }
+
+  Future<void> _loadMoreYouTube() async {
+    if (_youtubeNextPageToken == null || _isLoadingMoreYouTube || _query.isEmpty) return;
+    setState(() => _isLoadingMoreYouTube = true);
+    try {
+      final ytService = ref.read(youtubeApiServiceProvider);
+      final res = await ytService.searchMusicVideosWithPagination(
+        _query,
+        pageToken: _youtubeNextPageToken,
+        maxResults: 15,
+      );
+      if (mounted) {
+        setState(() {
+          _youtubeResults.addAll(res.tracks);
+          _youtubeNextPageToken = res.nextPageToken;
+        });
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _isLoadingMoreYouTube = false);
+    }
   }
 
   void _clearSearch() {
@@ -117,47 +206,237 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     setState(() {
       _query = '';
       _localResults = [];
+      _youtubeResults = [];
+      _youtubeNextPageToken = null;
       _onlineResults = [];
-      _isLoadingOnline = false;
+      _spotifyTracks = [];
+      _spotifyRequiresAuth = false;
+      _searchSuggestions = [];
+      _isLoadingSearch = false;
+      _quotaOrAuthWarning = null;
     });
+  }
+
+  void _showApiKeyConfigDialog() {
+    final secureStorage = ref.read(secureStorageServiceProvider);
+    final textController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Row(
+          children: [
+            Icon(Icons.key_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('YouTube API Key',
+                style: TextStyle(color: Colors.white, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your Google Cloud YouTube Data API v3 key to enable high-speed music search, exact video durations, and official player streaming.',
+              style: TextStyle(color: AppColors.secondaryText, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: textController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'AIzaSy...',
+                hintStyle: const TextStyle(color: AppColors.tertiaryText),
+                filled: true,
+                fillColor: AppColors.primaryBackground,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () async {
+              final key = textController.text.trim();
+              if (key.isNotEmpty) {
+                await secureStorage.saveCustomApiKey('youtube', key);
+                if (ctx.mounted) Navigator.of(ctx).pop();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('YouTube API key updated successfully!')),
+                  );
+                  if (_query.isNotEmpty) _onSearchChanged(_query);
+                }
+              }
+            },
+            child: const Text('Save Key', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSpotifyConfigDialog() {
+    final secureStorage = ref.read(secureStorageServiceProvider);
+    final clientIdController = TextEditingController();
+    final clientSecretController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Row(
+          children: [
+            Icon(Icons.graphic_eq_rounded, color: Color(0xFF1DB954)),
+            SizedBox(width: 8),
+            Text('Spotify Integration',
+                style: TextStyle(color: Colors.white, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your Spotify Developer Client ID and Secret to search 100M+ tracks, artists, and playlists via Spotify Web API.',
+              style: TextStyle(color: AppColors.secondaryText, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: clientIdController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Spotify Client ID',
+                hintStyle: const TextStyle(color: AppColors.tertiaryText),
+                filled: true,
+                fillColor: AppColors.primaryBackground,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: clientSecretController,
+              obscureText: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Spotify Client Secret (Optional)',
+                hintStyle: const TextStyle(color: AppColors.tertiaryText),
+                filled: true,
+                fillColor: AppColors.primaryBackground,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1DB954)),
+            onPressed: () async {
+              final id = clientIdController.text.trim();
+              final secret = clientSecretController.text.trim();
+              if (id.isNotEmpty) {
+                await secureStorage.saveSpotifyCredentials(
+                  clientId: id,
+                  clientSecret: secret.isNotEmpty ? secret : null,
+                );
+                final repo = ref.read(spotifyRepositoryProvider);
+                if (secret.isNotEmpty) {
+                  await repo.connectWithClientCredentials(id, secret);
+                } else {
+                  repo.configureClientId(id);
+                }
+                if (ctx.mounted) Navigator.of(ctx).pop();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Spotify credentials saved!')),
+                  );
+                  if (_query.isNotEmpty) _onSearchChanged(_query);
+                }
+              }
+            },
+            child: const Text('Connect', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _playTrack(TrackModel track, List<TrackModel> queue) {
+    final prefs = ref.read(sharedPreferencesServiceProvider);
+    prefs.addRecentSearch(track.title);
+
+    if (track.sourceType == AudioSourceType.youtubeVideo) {
+      // 1. YouTube in-app video playback with official player
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => YoutubeMusicPlayerScreen(
+            title: track.title,
+            artist: track.artistName,
+            videoId: track.youtubeVideoId,
+            videoUrl: track.sourceDetailUrl,
+            durationMs: track.durationMs,
+            artworkUrl: track.artworkUrl,
+            track: track,
+          ),
+        ),
+      );
+    } else if (track.sourceType == AudioSourceType.spotifyStream) {
+      // 2. Spotify Track: if 30s preview URL is available, play in audio engine; else handoff to Spotify App
+      if (track.previewUrl != null && track.previewUrl!.isNotEmpty) {
+        final audio = ref.read(audioPlayerServiceProvider);
+        audio.playTrack(track, queueContext: queue);
+      } else {
+        final repo = ref.read(spotifyRepositoryProvider);
+        repo.openInSpotify(track.audioSourceUrl);
+      }
+    } else {
+      // 3. Audio playback for local & audio stream tracks
+      final audio = ref.read(audioPlayerServiceProvider);
+      audio.playTrack(track, queueContext: queue);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final prefs = ref.watch(sharedPreferencesServiceProvider);
-    final user = ref.watch(currentUserProvider);
     final recentSearches = prefs.getRecentSearches();
-    final audio = ref.read(audioPlayerServiceProvider);
     final isSearching = _query.isNotEmpty;
 
-    // Dynamic search sources including user's preferred languages
-    final preferredLangs = user.preferredLanguages.isNotEmpty
-        ? user.preferredLanguages
-        : ['Tamil', 'English'];
-    final allSources = [
-      'All Results',
-      'Online Music',
-      'Local Device Audio',
-      ...preferredLangs,
+    const sourceTabs = [
+      {'label': 'All Sources', 'icon': Icons.apps_rounded, 'color': AppColors.primaryAccent},
+      {'label': 'YouTube', 'icon': Icons.smart_display_rounded, 'color': Colors.redAccent},
+      {'label': 'Spotify', 'icon': Icons.graphic_eq_rounded, 'color': Color(0xFF1DB954)},
+      {'label': 'Streams', 'icon': Icons.cloud_queue_rounded, 'color': Color(0xFF8E2DE2)},
+      {'label': 'Local', 'icon': Icons.folder_rounded, 'color': Color(0xFF00B4D8)},
     ];
 
-    // Filter results based on selected search source chip
+    // Filter displayed results based on selected source tab
     List<TrackModel> displayedResults = [];
     if (_searchSourceIndex == 0) {
-      displayedResults = [..._localResults, ..._onlineResults];
+      displayedResults = [
+        ..._youtubeResults,
+        ..._spotifyTracks,
+        ..._onlineResults,
+        ..._localResults,
+      ];
     } else if (_searchSourceIndex == 1) {
-      displayedResults = _onlineResults;
+      displayedResults = _youtubeResults;
     } else if (_searchSourceIndex == 2) {
+      displayedResults = _spotifyTracks;
+    } else if (_searchSourceIndex == 3) {
+      displayedResults = _onlineResults;
+    } else if (_searchSourceIndex == 4) {
       displayedResults = _localResults;
-    } else {
-      // Filter by selected language
-      final selectedLanguage =
-          allSources[_searchSourceIndex % allSources.length].toLowerCase();
-      displayedResults = [..._localResults, ..._onlineResults].where((t) {
-        final text = '${t.title} ${t.artistName} ${t.albumName} ${t.genre}'
-            .toLowerCase();
-        return text.contains(selectedLanguage);
-      }).toList();
     }
 
     return Scaffold(
@@ -166,6 +445,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         backgroundColor: AppColors.primaryBackground,
         title: Text('Search Music',
             style: AppTypography.displayMedium.copyWith(fontSize: 24)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.graphic_eq_rounded, size: 20, color: Color(0xFF1DB954)),
+            tooltip: 'Spotify Integration Settings',
+            onPressed: _showSpotifyConfigDialog,
+          ),
+          IconButton(
+            icon: const Icon(Icons.vpn_key_outlined, size: 20, color: Colors.redAccent),
+            tooltip: 'YouTube API Key Settings',
+            onPressed: _showApiKeyConfigDialog,
+          ),
+        ],
       ),
       body: CustomScrollView(
         slivers: [
@@ -184,7 +475,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   onChanged: _onSearchChanged,
                   style: AppTypography.bodyLarge,
                   decoration: InputDecoration(
-                    hintText: 'Search Tamil, Bollywood, Pop, Artists, Songs...',
+                    hintText: 'Search songs across YouTube, Spotify, Streams...',
                     hintStyle: AppTypography.bodyMedium
                         .copyWith(color: AppColors.tertiaryText),
                     prefixIcon: const Icon(Icons.search_rounded,
@@ -205,7 +496,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
           ),
 
-          // 2. Search Source Selector Chips (when query is active)
+          // 2. Source Provider Filter Chips
           if (isSearching)
             SliverToBoxAdapter(
               child: SizedBox(
@@ -213,32 +504,34 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 child: ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   scrollDirection: Axis.horizontal,
-                  itemCount: allSources.length,
+                  itemCount: sourceTabs.length,
                   itemBuilder: (context, index) {
+                    final tab = sourceTabs[index];
                     final isSelected = _searchSourceIndex == index;
+                    final tabColor = tab['color'] as Color;
                     return Padding(
                       padding: const EdgeInsets.only(right: 8.0),
                       child: ChoiceChip(
+                        avatar: Icon(
+                          tab['icon'] as IconData,
+                          size: 16,
+                          color: isSelected ? Colors.black : tabColor,
+                        ),
                         label: Text(
-                          allSources[index],
+                          tab['label'] as String,
                           style: AppTypography.labelSmall.copyWith(
-                            color: isSelected
-                                ? Colors.black
-                                : AppColors.primaryText,
-                            fontWeight:
-                                isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color: isSelected ? Colors.black : AppColors.primaryText,
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                           ),
                         ),
                         selected: isSelected,
-                        selectedColor: AppColors.primaryAccent,
+                        selectedColor: tabColor,
                         backgroundColor: AppColors.surface,
                         side: BorderSide.none,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16)),
-                        onSelected: (val) {
-                          setState(() {
-                            _searchSourceIndex = index;
-                          });
+                        onSelected: (_) {
+                          setState(() => _searchSourceIndex = index);
                         },
                       ),
                     );
@@ -247,93 +540,138 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               ),
             ),
 
-          // 2.5 YouTube Video Discovery Banner (Option 2)
-          if (isSearching)
+          // 2.2 Live Search Suggestions
+          if (isSearching && _searchSuggestions.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Container(
+                height: 34,
+                margin: const EdgeInsets.only(top: 8),
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _searchSuggestions.length,
+                  itemBuilder: (context, idx) {
+                    final sug = _searchSuggestions[idx];
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ActionChip(
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        backgroundColor: AppColors.surfaceElevated,
+                        label: Text(sug, style: const TextStyle(fontSize: 11)),
+                        onPressed: () {
+                          _searchController.text = sug;
+                          _onSearchChanged(sug);
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+
+          // 2.5 YouTube Warning Banner
+          if (_quotaOrAuthWarning != null)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: () async {
-                    final searchUrl = Uri.parse(
-                        'https://www.youtube.com/results?search_query=${Uri.encodeComponent("$_query song")}');
-                    if (await canLaunchUrl(searchUrl)) {
-                      await launchUrl(searchUrl,
-                          mode: LaunchMode.externalApplication);
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.red.shade900.withValues(alpha: 0.35),
-                          AppColors.surface,
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                          color: Colors.red.withValues(alpha: 0.4), width: 1),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.play_circle_filled,
-                            color: Colors.red, size: 28),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Watch & Listen "$_query" on YouTube',
-                                style: AppTypography.titleSmall.copyWith(
-                                    fontWeight: FontWeight.bold, fontSize: 13),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Text(
-                                'Official HD Music Videos & Lyric Videos',
-                                style: AppTypography.bodySmall.copyWith(
-                                    color: AppColors.secondaryText,
-                                    fontSize: 11),
-                              ),
-                            ],
-                          ),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade900.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded,
+                          color: Colors.redAccent, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _quotaOrAuthWarning!,
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
                         ),
-                        const Icon(Icons.open_in_new,
-                            color: AppColors.secondaryText, size: 16),
-                      ],
-                    ),
+                      ),
+                      TextButton(
+                        onPressed: _showApiKeyConfigDialog,
+                        child: const Text('Config Key',
+                            style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
 
-          // 3. Search Results View OR Browse Genres View
-          if (isSearching) ...[
-            if (_isLoadingOnline)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Center(
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppColors.primaryAccent),
-                    ),
+          // 2.7 Spotify Unauthenticated Helper Card (When viewing Spotify tab)
+          if (isSearching && _searchSourceIndex == 2 && (_spotifyRequiresAuth || _spotifyTracks.isEmpty && !_isLoadingSearch))
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1DB954).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF1DB954).withValues(alpha: 0.4)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.graphic_eq_rounded, color: Color(0xFF1DB954), size: 20),
+                          SizedBox(width: 8),
+                          Text('Spotify Catalog Integration',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14)),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Connect Spotify API using your Developer Client ID or PKCE to search 100M+ songs, view full album art, and hand off playback directly to Spotify.',
+                        style: TextStyle(color: AppColors.secondaryText, fontSize: 12),
+                      ),
+                      const SizedBox(height: 10),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1DB954),
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        ),
+                        onPressed: _showSpotifyConfigDialog,
+                        icon: const Icon(Icons.vpn_key_rounded, size: 16),
+                        label: const Text('Configure Spotify API', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            if (displayedResults.isEmpty && !_isLoadingOnline)
+            ),
+
+          // 3. Search Results
+          if (isSearching) ...[
+            if (_isLoadingSearch)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: AppColors.primaryAccent),
+                  ),
+                ),
+              ),
+            if (displayedResults.isEmpty && !_isLoadingSearch)
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: EmptyStateView(
                   icon: Icons.search_off_rounded,
                   title: 'No results found',
                   description:
-                      'We couldn\'t find any matching tracks for "$_query". Try searching with another song or artist name.',
+                      'No matching tracks for "$_query" under ${sourceTabs[_searchSourceIndex]['label']}. Try switching the source chip or adjusting keywords.',
                 ),
               )
             else
@@ -341,18 +679,58 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final track = displayedResults[index];
-                    final isOnline =
-                        track.sourceType == AudioSourceType.networkStream;
+                    final isYouTube = track.sourceType == AudioSourceType.youtubeVideo;
+                    final isSpotify = track.sourceType == AudioSourceType.spotifyStream;
+                    final isOnline = track.sourceType == AudioSourceType.networkStream;
+
+                    Color pillColor = const Color(0xFF00B4D8);
+                    String pillText = 'Local';
+                    IconData trailingIcon = Icons.play_circle_filled_rounded;
+
+                    if (isYouTube) {
+                      pillColor = Colors.redAccent;
+                      pillText = 'YouTube';
+                      trailingIcon = Icons.smart_display_rounded;
+                    } else if (isSpotify) {
+                      pillColor = const Color(0xFF1DB954);
+                      pillText = 'Spotify';
+                      trailingIcon = Icons.open_in_new_rounded;
+                    } else if (isOnline) {
+                      pillColor = const Color(0xFF8E2DE2);
+                      pillText = 'Stream';
+                    }
+
                     return Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       child: ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: NetworkOrAssetImage(
-                          imageUrl: track.artworkUrl,
-                          width: 48,
-                          height: 48,
-                          borderRadius: BorderRadius.circular(6),
+                        leading: Stack(
+                          children: [
+                            NetworkOrAssetImage(
+                              imageUrl: track.artworkUrl,
+                              width: 52,
+                              height: 52,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            Positioned(
+                              bottom: 2,
+                              right: 2,
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.8),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  isYouTube
+                                      ? Icons.play_arrow_rounded
+                                      : (isSpotify ? Icons.graphic_eq_rounded : Icons.music_note_rounded),
+                                  size: 12,
+                                  color: pillColor,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         title: Row(
                           children: [
@@ -367,78 +745,67 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                             ),
                             const SizedBox(width: 6),
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: isOnline
-                                    ? const Color(0xFF8E2DE2)
-                                        .withValues(alpha: 0.2)
-                                    : AppColors.surfaceLight,
+                                color: pillColor.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
-                                isOnline ? 'Online' : 'Local',
+                                pillText,
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: isOnline
-                                      ? const Color(0xFF8E2DE2)
-                                      : AppColors.secondaryText,
+                                  color: pillColor,
                                 ),
                               ),
                             ),
                           ],
                         ),
                         subtitle: Text(
-                          '${track.artistName} • ${DurationFormatter.formatMs(track.durationMs)}',
+                          isYouTube
+                              ? '${track.artistName} • ${DurationFormatter.formatMs(track.durationMs)} • ID: ${track.youtubeVideoId ?? ""}'
+                              : '${track.artistName} • ${DurationFormatter.formatMs(track.durationMs)}',
                           style: AppTypography.bodySmall,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Option 2: Watch on YouTube Button
-                            IconButton(
-                              icon: const Icon(Icons.video_library_outlined,
-                                  color: Colors.redAccent, size: 20),
-                              tooltip: 'Watch on YouTube',
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        YoutubeMusicPlayerScreen(
-                                      title: track.title,
-                                      artist: track.artistName,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                            // Option 1: Full-Length Audio Stream in App
-                            IconButton(
-                              icon: const Icon(Icons.play_circle_filled_rounded,
-                                  color: AppColors.primaryAccent, size: 30),
-                              tooltip: 'Play Full Song',
-                              onPressed: () {
-                                prefs.addRecentSearch(track.title);
-                                audio.playTrack(track,
-                                    queueContext: displayedResults);
-                              },
-                            ),
-                          ],
+                        trailing: IconButton(
+                          icon: Icon(trailingIcon, color: pillColor, size: 28),
+                          tooltip: isYouTube
+                              ? 'Watch in YouTube Player'
+                              : (isSpotify ? 'Open in Spotify' : 'Play Song'),
+                          onPressed: () => _playTrack(track, displayedResults),
                         ),
-                        onTap: () {
-                          prefs.addRecentSearch(track.title);
-                          audio.playTrack(track,
-                              queueContext: displayedResults);
-                        },
+                        onTap: () => _playTrack(track, displayedResults),
                       ),
                     );
                   },
                   childCount: displayedResults.length,
                 ),
               ),
+
+            // Pagination button for YouTube
+            if (_searchSourceIndex == 1 && _youtubeNextPageToken != null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Center(
+                    child: _isLoadingMoreYouTube
+                        ? const CircularProgressIndicator(color: Colors.redAccent)
+                        : OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                              side: const BorderSide(color: Colors.redAccent),
+                            ),
+                            icon: const Icon(Icons.expand_more_rounded),
+                            label: const Text('Load More YouTube Videos'),
+                            onPressed: _loadMoreYouTube,
+                          ),
+                  ),
+                ),
+              ),
           ] else ...[
-            // Recent searches header
+            // Recent Searches header
             if (recentSearches.isNotEmpty) ...[
               SliverToBoxAdapter(
                 child: Padding(
@@ -494,7 +861,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-                child: Text('Explore Genres & Moods',
+                child: Text('Explore Genres & Music Hubs',
                     style: AppTypography.titleMedium
                         .copyWith(fontWeight: FontWeight.w700)),
               ),
@@ -583,7 +950,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           ],
 
           const SliverToBoxAdapter(
-            child: SizedBox(height: 90), // Mini player padding
+            child: SizedBox(height: 90),
           ),
         ],
       ),

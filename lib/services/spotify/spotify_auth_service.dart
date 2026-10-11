@@ -201,13 +201,71 @@ class SpotifyAuthService {
     }
   }
 
-  /// Gets valid access token, auto-refreshing if expired
+  /// Request Client Credentials Token for app-level API access (Search, Catalog)
+  Future<String?> requestClientCredentialsToken({
+    required String clientId,
+    required String clientSecret,
+  }) async {
+    final effectiveId = clientId.trim().isEmpty
+        ? SpotifyConstants.defaultClientId
+        : clientId.trim();
+    final credentials =
+        base64Encode(utf8.encode('$effectiveId:${clientSecret.trim()}'));
+    try {
+      final response = await _client.post(
+        Uri.parse(SpotifyConstants.tokenEndpoint),
+        headers: {
+          'Authorization': 'Basic $credentials',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: {'grant_type': 'client_credentials'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final token = data['access_token'] as String;
+        final expiresIn = data['expires_in'] as int? ?? 3600;
+        await _secureStorage.saveSpotifyTokens(
+          accessToken: token,
+          refreshToken: null,
+          expiresInSeconds: expiresIn,
+        );
+        _connectionController.add(true);
+        return token;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Gets valid access token, auto-refreshing or requesting client credentials if needed
   Future<String?> getValidAccessToken(String clientId) async {
     final isExpired = await _secureStorage.isSpotifyTokenExpired();
-    if (isExpired) {
-      final refreshed = await refreshAccessToken(clientId);
-      if (refreshed != null) return refreshed;
+    if (!isExpired) {
+      final token = await _secureStorage.getSpotifyAccessToken();
+      if (token != null && token.isNotEmpty) return token;
     }
+
+    // 1. Try OAuth Refresh token
+    final refreshed = await refreshAccessToken(clientId);
+    if (refreshed != null) return refreshed;
+
+    // 2. Try Client Credentials if configured
+    final storedSecret = await _secureStorage.getSpotifyClientSecret();
+    final storedClientId = await _secureStorage.getSpotifyClientId();
+    final effectiveId = (storedClientId != null && storedClientId.isNotEmpty)
+        ? storedClientId
+        : clientId;
+
+    if (storedSecret != null &&
+        storedSecret.isNotEmpty &&
+        effectiveId.isNotEmpty) {
+      final ccToken = await requestClientCredentialsToken(
+        clientId: effectiveId,
+        clientSecret: storedSecret,
+      );
+      if (ccToken != null) return ccToken;
+    }
+
     return _secureStorage.getSpotifyAccessToken();
   }
 

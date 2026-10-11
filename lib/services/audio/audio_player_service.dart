@@ -41,10 +41,13 @@ class AudioPlayerService {
   Stream<List<TrackModel>> get queueStream => _queueController.stream;
   Stream<bool> get isPlayingStream => _player.playingStream;
   Stream<PlayerState> get playerStateStream => _player.playerStateStream;
+  Stream<bool> get isBufferingStream => _player.playerStateStream
+      .map((s) => s.processingState == ProcessingState.buffering);
   Stream<Duration> get positionStream => _player.positionStream;
   Stream<Duration?> get durationStream => _player.durationStream;
   Stream<Duration> get bufferedPositionStream => _player.bufferedPositionStream;
   Stream<double> get speedStream => _player.speedStream;
+  Stream<double> get volumeStream => _player.volumeStream;
   Stream<bool> get shuffleStream => _shuffleController.stream;
   Stream<AudioRepeatMode> get repeatStream => _repeatController.stream;
   Stream<DateTime?> get sleepTimerStream => _sleepTimerController.stream;
@@ -58,10 +61,13 @@ class AudioPlayerService {
   List<TrackModel> get queue => List.unmodifiable(_queue);
   int get currentIndex => _currentIndex;
   bool get isPlaying => _player.playing;
+  bool get isBuffering =>
+      _player.playerState.processingState == ProcessingState.buffering;
   bool get isShuffle => _isShuffle;
   AudioRepeatMode get repeatMode => _repeatMode;
   Duration get currentPosition => _player.position;
   Duration? get duration => _player.duration;
+  double get volume => _player.volume;
   DateTime? get sleepTimerTarget => _sleepTimerTarget;
 
   Future<void> _initAudioSession() async {
@@ -212,15 +218,24 @@ class AudioPlayerService {
 
     try {
       Duration? loadedDuration;
+      final playableUrl = (track.previewUrl != null && track.previewUrl!.isNotEmpty)
+          ? track.previewUrl!
+          : track.audioSourceUrl;
+
       if (track.sourceType == AudioSourceType.localFile) {
         if (kIsWeb) {
-          loadedDuration = await _player.setUrl(track.audioSourceUrl);
+          loadedDuration = await _player.setUrl(playableUrl);
         } else {
-          loadedDuration = await _player.setFilePath(track.audioSourceUrl);
+          loadedDuration = await _player.setFilePath(playableUrl);
         }
+      } else if (playableUrl.startsWith('http://') ||
+          playableUrl.startsWith('https://')) {
+        // Direct stream, Audius stream, or audio preview URL
+        loadedDuration = await _player.setUrl(playableUrl);
       } else {
-        // Network stream, full-length audio stream, or preview stream
-        loadedDuration = await _player.setUrl(track.audioSourceUrl);
+        debugPrint(
+            'ℹ️ [AudioPlayerService] Track has non-stream URL ($playableUrl). Playback handoff recommended.');
+        return;
       }
 
       if (loadedDuration != null && loadedDuration.inMilliseconds > 0) {
@@ -240,6 +255,10 @@ class AudioPlayerService {
     } catch (e) {
       debugPrint('❌ [AudioPlayerService] Error playing audio track: $e');
     }
+  }
+
+  Future<void> retryCurrentTrack() async {
+    await _loadAndPlayCurrent();
   }
 
   Future<void> play() async => _player.play();
