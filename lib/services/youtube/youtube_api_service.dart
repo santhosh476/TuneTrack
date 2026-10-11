@@ -156,9 +156,16 @@ class YouTubeApiService {
         final errorBody = jsonDecode(searchResponse.body);
         final message = errorBody['error']?['message'] ?? 'Quota exceeded';
         debugPrint('⚠️ [YouTubeApiService] YouTube API 403 Error: $message');
+        final isRestriction = message.toLowerCase().contains('blocked') ||
+            message.toLowerCase().contains('client application') ||
+            message.toLowerCase().contains('restriction') ||
+            message.toLowerCase().contains('api key');
         throw YouTubeApiException(
-            'YouTube API quota limit reached or invalid key: $message',
-            isQuotaError: true);
+            isRestriction
+                ? 'YouTube API Key Restriction: Requests from this client are blocked by Google Cloud API key restrictions. Update key in Settings.'
+                : 'YouTube daily quota limit reached: $message',
+            isQuotaError: !isRestriction,
+            isConfigError: isRestriction);
       }
 
       if (searchResponse.statusCode != 200) {

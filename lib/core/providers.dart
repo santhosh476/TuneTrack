@@ -360,3 +360,8 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
     _prefs.setDarkMode(mode == ThemeMode.dark);
   }
 }
+
+final authorizedOnlineVideosProvider = Provider<List<TrackModel>>((ref) {
+  final service = ref.watch(onlineMusicServiceProvider);
+  return service.getAuthorizedOnlineVideos();
+});

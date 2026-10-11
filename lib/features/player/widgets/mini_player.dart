@@ -37,6 +37,7 @@ class MiniPlayer extends ConsumerWidget {
     final isFav = ref.watch(trackRepositoryProvider).isFavourite(track.id);
 
     final isYouTube = track.sourceType == AudioSourceType.youtubeVideo;
+    final isOnlineVideo = track.sourceType == AudioSourceType.onlineVideo;
     final isSpotify = track.sourceType == AudioSourceType.spotifyStream;
     final isStream = track.sourceType == AudioSourceType.networkStream;
 
@@ -48,6 +49,10 @@ class MiniPlayer extends ConsumerWidget {
       badgeColor = Colors.redAccent;
       badgeLabel = 'YouTube';
       badgeIcon = Icons.smart_display_rounded;
+    } else if (isOnlineVideo) {
+      badgeColor = const Color(0xFFC471ED);
+      badgeLabel = 'Video';
+      badgeIcon = Icons.ondemand_video_rounded;
     } else if (isSpotify) {
       badgeColor = const Color(0xFF1DB954);
       badgeLabel = 'Spotify';

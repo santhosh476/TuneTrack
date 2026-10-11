@@ -7,6 +7,7 @@ import '../../../core/utils/duration_formatter.dart';
 import '../../../core/widgets/network_or_asset_image.dart';
 import '../../../data/models/track_model.dart';
 import '../../../services/audio/audio_player_service.dart';
+import 'online_video_player_screen.dart';
 import 'youtube_music_player_screen.dart';
 import 'queue_screen.dart';
 import 'sleep_timer_dialog.dart';
@@ -60,6 +61,7 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
     final currentVolume = volumeAsync.value ?? audio.volume;
 
     final isYouTube = track.sourceType == AudioSourceType.youtubeVideo;
+    final isOnlineVideo = track.sourceType == AudioSourceType.onlineVideo;
     final isSpotify = track.sourceType == AudioSourceType.spotifyStream;
     final isStream = track.sourceType == AudioSourceType.networkStream;
 
@@ -71,6 +73,10 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
       badgeColor = Colors.redAccent;
       badgeLabel = 'YouTube Music Video';
       badgeIcon = Icons.smart_display_rounded;
+    } else if (isOnlineVideo) {
+      badgeColor = const Color(0xFFC471ED);
+      badgeLabel = 'Online HD Video';
+      badgeIcon = Icons.ondemand_video_rounded;
     } else if (isSpotify) {
       badgeColor = const Color(0xFF1DB954);
       badgeLabel = 'Spotify Track';
@@ -289,6 +295,27 @@ class _FullPlayerScreenState extends ConsumerState<FullPlayerScreen> {
                                       artworkUrl: track.artworkUrl,
                                       track: track,
                                     ),
+                                  ),
+                                );
+                              },
+                            )
+                          else if (isOnlineVideo)
+                            TextButton.icon(
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                              ),
+                              icon: const Icon(Icons.ondemand_video_rounded,
+                                  size: 16, color: Color(0xFFC471ED)),
+                              label: const Text('Watch Video',
+                                  style: TextStyle(
+                                      color: Color(0xFFC471ED), fontSize: 11)),
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        OnlineVideoPlayerScreen(track: track),
                                   ),
                                 );
                               },

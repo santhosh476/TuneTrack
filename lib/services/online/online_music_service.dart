@@ -181,4 +181,90 @@ class OnlineMusicService {
       {int limit = 15}) async {
     return searchTracks(category, limit: limit);
   }
+
+  /// Curated authorized online video streams with Creative Commons / Open licenses
+  List<TrackModel> getAuthorizedOnlineVideos() {
+    return [
+      TrackModel(
+        id: 'video_cc_1',
+        title: 'Big Buck Bunny (Official Animation Music)',
+        artistName: 'Blender Open Movie Studio',
+        albumName: 'Creative Commons 3.0',
+        durationMs: 596000,
+        artworkUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg',
+        sourceType: AudioSourceType.onlineVideo,
+        audioSourceUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        genre: 'Animation & Music',
+        addedAt: DateTime(2024, 1, 1),
+        license: 'Creative Commons Attribution 3.0',
+        sourceDetailUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+      ),
+      TrackModel(
+        id: 'video_cc_2',
+        title: 'Tears of Steel (Sci-Fi Soundtrack & Visuals)',
+        artistName: 'Blender Foundation & Joram van Klaveren',
+        albumName: 'Open Movie Project',
+        durationMs: 734000,
+        artworkUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/TearsOfSteel.jpg',
+        sourceType: AudioSourceType.onlineVideo,
+        audioSourceUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        genre: 'Sci-Fi & Orchestral',
+        addedAt: DateTime(2024, 1, 1),
+        license: 'Creative Commons Attribution 3.0',
+        sourceDetailUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+      ),
+      TrackModel(
+        id: 'video_cc_3',
+        title: 'Elephants Dream (Ambient Cyberpunk Symphony)',
+        artistName: 'Orange Open Movie Team',
+        albumName: 'Open Audio Project',
+        durationMs: 653000,
+        artworkUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/ElephantsDream.jpg',
+        sourceType: AudioSourceType.onlineVideo,
+        audioSourceUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+        genre: 'Ambient & Visuals',
+        addedAt: DateTime(2024, 1, 1),
+        license: 'Creative Commons Attribution 2.5',
+        sourceDetailUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+      ),
+      TrackModel(
+        id: 'video_cc_4',
+        title: 'Sintel (Orchestral Theme & Music Video)',
+        artistName: 'Jan Morgenstern & Blender Foundation',
+        albumName: 'Sintel Soundtrack',
+        durationMs: 888000,
+        artworkUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/Sintel.jpg',
+        sourceType: AudioSourceType.onlineVideo,
+        audioSourceUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+        genre: 'Cinematic Score',
+        addedAt: DateTime(2024, 1, 1),
+        license: 'Creative Commons Attribution 3.0',
+        sourceDetailUrl:
+            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+      ),
+    ];
+  }
+
+  /// Search authorized online video streams
+  List<TrackModel> searchOnlineVideos(String query) {
+    final trimmed = query.trim().toLowerCase();
+    final allVideos = getAuthorizedOnlineVideos();
+    if (trimmed.isEmpty) return allVideos;
+    return allVideos.where((v) {
+      return v.title.toLowerCase().contains(trimmed) ||
+          v.artistName.toLowerCase().contains(trimmed) ||
+          v.genre.toLowerCase().contains(trimmed);
+    }).toList();
+  }
 }

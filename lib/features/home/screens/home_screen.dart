@@ -11,10 +11,27 @@ import '../../../data/models/track_model.dart';
 import '../../../data/models/stats_summary_model.dart';
 import '../../library/screens/playlist_detail_screen.dart';
 import '../../onboarding/screens/language_onboarding_screen.dart';
+import '../../player/screens/online_video_player_screen.dart';
 import '../../player/screens/youtube_music_player_screen.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  int _selectedFilterIndex = 0;
+
+  final List<String> _filters = const [
+    'All',
+    'Music',
+    'Music Videos',
+    'Spotify',
+    'Online Audio',
+    'Local',
+  ];
 
   void _playTrack(BuildContext context, WidgetRef ref, TrackModel track,
       List<TrackModel> queue) {
@@ -30,6 +47,12 @@ class HomeScreen extends ConsumerWidget {
             artworkUrl: track.artworkUrl,
             track: track,
           ),
+        ),
+      );
+    } else if (track.sourceType == AudioSourceType.onlineVideo) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => OnlineVideoPlayerScreen(track: track),
         ),
       );
     } else if (track.sourceType == AudioSourceType.spotifyStream &&
@@ -49,13 +72,14 @@ class HomeScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     final tracks = ref.watch(allTracksProvider);
     final playlists = ref.watch(playlistsProvider);
     final stats = ref.watch(statsSummaryProvider(StatsTimeRange.day));
     final audio = ref.read(audioPlayerServiceProvider);
     final recommendedAsync = ref.watch(recommendedTracksFutureProvider);
+    final onlineVideos = ref.watch(authorizedOnlineVideosProvider);
 
     final greeting = DateFormatter.getGreeting();
     final preferredLanguages = user.preferredLanguages.isNotEmpty
@@ -132,6 +156,41 @@ class HomeScreen extends ConsumerWidget {
                 },
               ),
             ],
+          ),
+
+          // 1.5 Media Source & Category Filter Tabs
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 44,
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                scrollDirection: Axis.horizontal,
+                itemCount: _filters.length,
+                itemBuilder: (context, idx) {
+                  final isSel = _selectedFilterIndex == idx;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: ChoiceChip(
+                      selected: isSel,
+                      label: Text(_filters[idx]),
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                        color: isSel ? Colors.black : Colors.white70,
+                      ),
+                      selectedColor: AppColors.primaryAccent,
+                      backgroundColor: AppColors.surface,
+                      side: BorderSide.none,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      onSelected: (_) =>
+                          setState(() => _selectedFilterIndex = idx),
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
 
           // 2. Daily Goal & Streak Card
@@ -423,6 +482,129 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
 
+          // 4.5 Trending Music Videos & Visual Streams
+          if (onlineVideos.isNotEmpty) ...[
+            const SliverToBoxAdapter(
+              child: SectionHeader(
+                title: 'Trending Music Videos & Visuals',
+                subtitle: 'Full-screen authorized HD video streaming',
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 180,
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: onlineVideos.length,
+                  itemBuilder: (context, index) {
+                    final videoTrack = onlineVideos[index];
+                    return Container(
+                      width: 220,
+                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () =>
+                            _playTrack(context, ref, videoTrack, onlineVideos),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Stack(
+                              children: [
+                                NetworkOrAssetImage(
+                                  imageUrl: videoTrack.artworkUrl,
+                                  width: 220,
+                                  height: 124,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12),
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.black.withValues(alpha: 0.6)
+                                        ],
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 8,
+                                  left: 8,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF8E2DE2),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.ondemand_video_rounded,
+                                            size: 12, color: Colors.white),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'HD Video',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 8,
+                                  right: 8,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withValues(alpha: 0.7),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      DurationFormatter.formatMs(
+                                          videoTrack.durationMs),
+                                      style: const TextStyle(
+                                          fontSize: 10, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              videoTrack.title,
+                              style: AppTypography.titleSmall.copyWith(
+                                  fontWeight: FontWeight.w600, fontSize: 13),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              videoTrack.artistName,
+                              style: AppTypography.bodySmall
+                                  .copyWith(fontSize: 11),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+
           // 5. Dynamic Language-Based Sections
           for (final lang in preferredLanguages.take(3)) ...[
             SliverToBoxAdapter(
@@ -564,6 +746,8 @@ class HomeScreen extends ConsumerWidget {
                 final track = tracks[index];
                 final isYouTube =
                     track.sourceType == AudioSourceType.youtubeVideo;
+                final isOnlineVideo =
+                    track.sourceType == AudioSourceType.onlineVideo;
                 final isSpotify =
                     track.sourceType == AudioSourceType.spotifyStream;
                 final isOnline =
@@ -595,30 +779,37 @@ class HomeScreen extends ConsumerWidget {
                         decoration: BoxDecoration(
                           color: isYouTube
                               ? Colors.red.withValues(alpha: 0.2)
-                              : (isSpotify
-                                  ? const Color(0xFF1DB954)
+                              : (isOnlineVideo
+                                  ? const Color(0xFFC471ED)
                                       .withValues(alpha: 0.2)
-                                  : (isOnline
-                                      ? const Color(0xFF8E2DE2)
+                                  : (isSpotify
+                                      ? const Color(0xFF1DB954)
                                           .withValues(alpha: 0.2)
-                                      : AppColors.surfaceLight)),
+                                      : (isOnline
+                                          ? const Color(0xFF8E2DE2)
+                                              .withValues(alpha: 0.2)
+                                          : AppColors.surfaceLight))),
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: Text(
                           isYouTube
                               ? 'YouTube'
-                              : (isSpotify
-                                  ? 'Spotify'
-                                  : (isOnline ? 'Online' : 'Local')),
+                              : (isOnlineVideo
+                                  ? 'Video'
+                                  : (isSpotify
+                                      ? 'Spotify'
+                                      : (isOnline ? 'Online' : 'Local'))),
                           style: TextStyle(
                             fontSize: 9,
                             color: isYouTube
                                 ? Colors.redAccent
-                                : (isSpotify
-                                    ? const Color(0xFF1DB954)
-                                    : (isOnline
-                                        ? const Color(0xFF8E2DE2)
-                                        : AppColors.secondaryText)),
+                                : (isOnlineVideo
+                                    ? const Color(0xFFC471ED)
+                                    : (isSpotify
+                                        ? const Color(0xFF1DB954)
+                                        : (isOnline
+                                            ? const Color(0xFF8E2DE2)
+                                            : AppColors.secondaryText))),
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -633,14 +824,18 @@ class HomeScreen extends ConsumerWidget {
                     icon: Icon(
                       isYouTube
                           ? Icons.smart_display_rounded
-                          : (isSpotify
-                              ? Icons.music_note_rounded
-                              : Icons.play_arrow_rounded),
+                          : (isOnlineVideo
+                              ? Icons.ondemand_video_rounded
+                              : (isSpotify
+                                  ? Icons.music_note_rounded
+                                  : Icons.play_arrow_rounded)),
                       color: isYouTube
                           ? Colors.redAccent
-                          : (isSpotify
-                              ? const Color(0xFF1DB954)
-                              : AppColors.primaryAccent),
+                          : (isOnlineVideo
+                              ? const Color(0xFFC471ED)
+                              : (isSpotify
+                                  ? const Color(0xFF1DB954)
+                                  : AppColors.primaryAccent)),
                     ),
                     onPressed: () => _playTrack(context, ref, track, tracks),
                   ),

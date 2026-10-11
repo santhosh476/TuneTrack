@@ -10,6 +10,7 @@ import '../../../core/widgets/network_or_asset_image.dart';
 import '../../../data/models/track_model.dart';
 import '../../../data/models/playlist_model.dart';
 import '../../../services/youtube/youtube_api_service.dart';
+import '../../player/screens/online_video_player_screen.dart';
 import '../../player/screens/youtube_music_player_screen.dart';
 import 'genre_detail_screen.dart';
 
@@ -32,6 +33,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   bool _isLoadingMoreYouTube = false;
 
   List<TrackModel> _onlineResults = [];
+  List<TrackModel> _onlineVideoResults = [];
   List<TrackModel> _spotifyTracks = [];
   bool _spotifyRequiresAuth = false;
 
@@ -95,6 +97,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         _youtubeResults = [];
         _youtubeNextPageToken = null;
         _onlineResults = [];
+        _onlineVideoResults = [];
         _spotifyTracks = [];
         _spotifyRequiresAuth = false;
         _searchSuggestions = [];
@@ -103,10 +106,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return;
     }
 
-    // 1. Immediate local library search
+    // 1. Immediate local library & authorized video search
     final localRepo = ref.read(trackRepositoryProvider);
+    final onlineMusicService = ref.read(onlineMusicServiceProvider);
     setState(() {
       _localResults = localRepo.searchTracks(trimmed);
+      _onlineVideoResults = onlineMusicService.searchOnlineVideos(trimmed);
     });
 
     // 2. Fetch search suggestions fast
@@ -209,6 +214,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       _youtubeResults = [];
       _youtubeNextPageToken = null;
       _onlineResults = [];
+      _onlineVideoResults = [];
       _spotifyTracks = [];
       _spotifyRequiresAuth = false;
       _searchSuggestions = [];
@@ -390,6 +396,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           ),
         ),
       );
+    } else if (track.sourceType == AudioSourceType.onlineVideo) {
+      // 1.5 Authorized Online Video Stream: open HD Video Player
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => OnlineVideoPlayerScreen(track: track),
+        ),
+      );
     } else if (track.sourceType == AudioSourceType.spotifyStream) {
       // 2. Spotify Track: if 30s preview URL is available, play in audio engine; else handoff to Spotify App
       if (track.previewUrl != null && track.previewUrl!.isNotEmpty) {
@@ -415,6 +428,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     const sourceTabs = [
       {'label': 'All Sources', 'icon': Icons.apps_rounded, 'color': AppColors.primaryAccent},
       {'label': 'YouTube', 'icon': Icons.smart_display_rounded, 'color': Colors.redAccent},
+      {'label': 'Videos', 'icon': Icons.ondemand_video_rounded, 'color': Color(0xFFC471ED)},
       {'label': 'Spotify', 'icon': Icons.graphic_eq_rounded, 'color': Color(0xFF1DB954)},
       {'label': 'Streams', 'icon': Icons.cloud_queue_rounded, 'color': Color(0xFF8E2DE2)},
       {'label': 'Local', 'icon': Icons.folder_rounded, 'color': Color(0xFF00B4D8)},
@@ -425,6 +439,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (_searchSourceIndex == 0) {
       displayedResults = [
         ..._youtubeResults,
+        ..._onlineVideoResults,
         ..._spotifyTracks,
         ..._onlineResults,
         ..._localResults,
@@ -432,10 +447,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     } else if (_searchSourceIndex == 1) {
       displayedResults = _youtubeResults;
     } else if (_searchSourceIndex == 2) {
-      displayedResults = _spotifyTracks;
+      displayedResults = _onlineVideoResults;
     } else if (_searchSourceIndex == 3) {
-      displayedResults = _onlineResults;
+      displayedResults = _spotifyTracks;
     } else if (_searchSourceIndex == 4) {
+      displayedResults = _onlineResults;
+    } else if (_searchSourceIndex == 5) {
       displayedResults = _localResults;
     }
 
@@ -680,6 +697,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   (context, index) {
                     final track = displayedResults[index];
                     final isYouTube = track.sourceType == AudioSourceType.youtubeVideo;
+                    final isOnlineVideo = track.sourceType == AudioSourceType.onlineVideo;
                     final isSpotify = track.sourceType == AudioSourceType.spotifyStream;
                     final isOnline = track.sourceType == AudioSourceType.networkStream;
 
@@ -691,6 +709,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       pillColor = Colors.redAccent;
                       pillText = 'YouTube';
                       trailingIcon = Icons.smart_display_rounded;
+                    } else if (isOnlineVideo) {
+                      pillColor = const Color(0xFFC471ED);
+                      pillText = 'Video';
+                      trailingIcon = Icons.ondemand_video_rounded;
                     } else if (isSpotify) {
                       pillColor = const Color(0xFF1DB954);
                       pillText = 'Spotify';

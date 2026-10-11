@@ -4,9 +4,10 @@ enum AudioSourceType {
   spotifyStream,
   demoAsset,
   youtubeVideo,
+  onlineVideo,
 }
 
-/// Represents a single audio track in TuneTrack
+/// Represents a single audio or video track in TuneTrack
 class TrackModel {
   final String id;
   final String title;
@@ -42,6 +43,15 @@ class TrackModel {
 
   Duration get duration => Duration(milliseconds: durationMs);
   String get audioUrl => audioSourceUrl;
+  String get videoUrl => audioSourceUrl;
+
+  bool get isVideo =>
+      sourceType == AudioSourceType.youtubeVideo ||
+      sourceType == AudioSourceType.onlineVideo;
+  bool get isYouTube => sourceType == AudioSourceType.youtubeVideo;
+  bool get isOnlineVideo => sourceType == AudioSourceType.onlineVideo;
+  bool get isSpotify => sourceType == AudioSourceType.spotifyStream;
+  bool get isOnlineAudio => sourceType == AudioSourceType.networkStream;
 
   /// Returns YouTube Video ID if track is a YouTube video source
   String? get youtubeVideoId {
